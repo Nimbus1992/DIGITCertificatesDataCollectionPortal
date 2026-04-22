@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOnboarding } from "@/contexts/OnboardingContext";
+import { saveDeployment, saveTeamMembers, updateServiceStatus } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { MapPin, Users, Lock, Palette, Plug, Languages, Rocket, Check, ArrowLeft, KeyRound } from "lucide-react";
+import { MapPin, Users, Lock, Palette, Plug, Languages, Rocket, Check, KeyRound, Loader2 } from "lucide-react";
 import DeploymentSetup from "@/components/go-live/DeploymentSetup";
 import AddUsers from "@/components/go-live/AddUsers";
 import AuthSetup from "@/components/go-live/AuthSetup";
@@ -26,6 +27,7 @@ const GoLive: React.FC = () => {
   const [activeStep, setActiveStep] = useState<string | null>(null);
   const [completedItems, setCompletedItems] = useState<string[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const checklist: ChecklistItem[] = [
     {
@@ -71,7 +73,25 @@ const GoLive: React.FC = () => {
     setActiveStep(null);
   };
 
-  const handleGoLive = () => {
+  const handleGoLive = async () => {
+    setSaving(true);
+    try {
+      if (state.serviceId) {
+        await saveDeployment(state.serviceId, state.deployment);
+
+        if (state.organizationId && state.teamMembers.length > 0) {
+          await saveTeamMembers(state.organizationId, state.teamMembers);
+        }
+
+        await updateServiceStatus(state.serviceId, "live");
+      }
+    } catch (err) {
+      console.error("Failed to save go-live data:", err);
+      // Continue anyway — status is also tracked in localStorage
+    } finally {
+      setSaving(false);
+    }
+
     updateState({ isLive: true, serviceStatus: "live" });
     setShowSuccess(true);
   };
@@ -160,10 +180,15 @@ const GoLive: React.FC = () => {
         <div className="mt-8">
           <Button
             onClick={handleGoLive}
-            disabled={!requiredComplete}
+            disabled={!requiredComplete || saving}
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90 gap-2 h-12 text-base"
           >
-            <Rocket className="h-5 w-5" /> Go Live
+            {saving ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Rocket className="h-5 w-5" />
+            )}
+            {saving ? "Saving…" : "Go Live"}
           </Button>
           {!requiredComplete && (
             <p className="text-xs text-center text-muted-foreground mt-2">

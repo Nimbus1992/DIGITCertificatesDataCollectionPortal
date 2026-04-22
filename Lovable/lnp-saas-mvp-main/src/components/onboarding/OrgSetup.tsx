@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowRight, ArrowLeft, Globe, Building, Languages, Briefcase } from "lucide-react";
+import { ArrowRight, ArrowLeft, Globe, Building, Languages, Briefcase, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useOnboarding } from "@/contexts/OnboardingContext";
@@ -14,6 +14,9 @@ const languages = ["English", "Hindi", "Spanish", "French", "Arabic", "Chinese",
 const OrgSetup: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ onComplete, onBack }) => {
   const { state, updateState } = useOnboarding();
   const [subStep, setSubStep] = useState(0);
+  // Track whether the user has interacted with the current input so we only
+  // show the error after they've touched the field (not on first render).
+  const [touched, setTouched] = useState(false);
 
   const subSteps = [
     {
@@ -59,10 +62,21 @@ const OrgSetup: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ on
   ];
 
   const current = subSteps[subStep];
+  const isRequired = current.key === "orgName" || current.key === "country" || current.key === "language";
   const canProceed = current.value.trim().length > 0;
-  const isSkippable = current.key === "country" || current.key === "department";
+  // Show inline error only when: the field is required, the user has touched
+  // it (blurred or tried to proceed), and the value is blank / whitespace.
+  const showError = isRequired && touched && !canProceed;
+  // Only department is optional
+  const isSkippable = current.key === "department";
 
   const handleNext = () => {
+    // For required fields, mark as touched and block navigation if empty.
+    if (isRequired && !canProceed) {
+      setTouched(true);
+      return;
+    }
+    setTouched(false); // reset for the next sub-step
     if (subStep < subSteps.length - 1) {
       setSubStep(subStep + 1);
     } else {
@@ -71,6 +85,7 @@ const OrgSetup: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ on
   };
 
   const handleBack = () => {
+    setTouched(false);
     if (subStep > 0) {
       setSubStep(subStep - 1);
     } else {
@@ -97,32 +112,62 @@ const OrgSetup: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ on
 
           <div className="mt-6">
             {current.type === "input" ? (
-              <Input
-                value={current.value}
-                onChange={(e) => current.onChange(e.target.value)}
-                placeholder={current.placeholder}
-                className="text-lg h-12"
-                autoFocus
-                onKeyDown={(e) => e.key === "Enter" && canProceed && handleNext()}
-              />
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                {current.options?.map((option) => (
-                  <button
-                    key={option}
-                    onClick={() => {
-                      current.onChange(option);
-                      setTimeout(handleNext, 200);
-                    }}
-                    className={`px-4 py-3 rounded-lg border text-sm font-medium transition-all text-left
-                      ${current.value === option
-                        ? "border-accent bg-accent/10 text-accent"
-                        : "border-border bg-card text-foreground hover:border-accent/50 hover:bg-accent/5"
-                      }`}
+              <div className="space-y-1.5">
+                <Input
+                  value={current.value}
+                  onChange={(e) => {
+                    current.onChange(e.target.value);
+                    // Clear the error as soon as the user starts typing
+                    if (touched && e.target.value.trim().length > 0) setTouched(false);
+                  }}
+                  onBlur={() => isRequired && setTouched(true)}
+                  placeholder={current.placeholder}
+                  className={`text-lg h-12 ${showError ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                  autoFocus
+                  aria-invalid={showError}
+                  aria-describedby={showError ? "org-name-error" : undefined}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleNext();
+                  }}
+                />
+                {showError && (
+                  <p
+                    id="org-name-error"
+                    className="flex items-center gap-1.5 text-sm text-destructive animate-fade-in"
+                    role="alert"
                   >
-                    {option}
-                  </button>
-                ))}
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    Organization name is required — please enter your organization's name to continue.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  {current.options?.map((option) => (
+                    <button
+                      key={option}
+                      onClick={() => {
+                        current.onChange(option);
+                        if (!isRequired) setTimeout(handleNext, 200);
+                        else setTimeout(handleNext, 200);
+                      }}
+                      className={`px-4 py-3 rounded-lg border text-sm font-medium transition-all text-left
+                        ${current.value === option
+                          ? "border-accent bg-accent/10 text-accent"
+                          : "border-border bg-card text-foreground hover:border-accent/50 hover:bg-accent/5"
+                        }`}
+                    >
+                      {option}
+                    </button>
+                  ))}
+                </div>
+                {showError && (
+                  <p className="flex items-center gap-1.5 text-sm text-destructive animate-fade-in" role="alert">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    Please select a {current.key === "country" ? "country" : "language"} to continue.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -140,6 +185,15 @@ const OrgSetup: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ on
           {isSkippable && (
             <Button variant="ghost" onClick={handleNext} className="text-muted-foreground">
               Skip
+            </Button>
+          )}
+          {!isSkippable && current.type === "select" && (
+            <Button
+              onClick={handleNext}
+              disabled={!canProceed}
+              className="bg-accent text-accent-foreground hover:bg-accent/90 gap-1"
+            >
+              Continue <ArrowRight className="h-4 w-4" />
             </Button>
           )}
         </div>

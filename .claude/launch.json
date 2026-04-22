@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Dev Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/taherabharmal/LicenseAndPermitsNew/Lovable/lnp-saas-mvp-main && npm run dev"],
+      "port": 8080,
+      "autoPort": false
+    },
+    {
+      "name": "Preview Server",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/taherabharmal/LicenseAndPermitsNew/Lovable/lnp-saas-mvp-main && npm run preview"],
+      "port": 4173,
+      "autoPort": false
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s 'https://lzxitrnnfliszslrrevu.supabase.co/rest/v1/plugins?select=id,name&order=created_at.asc' -H 'apikey: sb_publishable_7M26g3Zq1_7_rN6G1L1Nhw_ndBP490B' -H 'Authorization: Bearer sb_publishable_7M26g3Zq1_7_rN6G1L1Nhw_ndBP490B' -H 'Accept: application/json')",
+      "Bash(python3 -c ':*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/)",
+      "Bash(npm run:*)",
+      "Bash(xargs kill:*)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' https://lzxitrnnfliszslrrevu.supabase.co/rest/v1/ -H 'apikey: sb_publishable_7M26g3Zq1_7_rN6G1L1Nhw_ndBP490B' -H 'Authorization: Bearer sb_publishable_7M26g3Zq1_7_rN6G1L1Nhw_ndBP490B')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"https://lzxitrnnfliszslrrevu.supabase.co/rest/v1/\")",
+      "Bash(curl -s 'https://lzxitrnnfliszslrrevu.supabase.co/rest/v1/organizations?limit=1' -H 'apikey: sb_publishable_7M26g3Zq1_7_rN6G1L1Nhw_ndBP490B' -H 'Authorization: Bearer sb_publishable_7M26g3Zq1_7_rN6G1L1Nhw_ndBP490B')",
+      "Bash(curl -s -w '\\\\nHTTP_STATUS:%{http_code}' 'https://lzxitrnnfliszslrrevu.supabase.co/rest/v1/organizations?limit=1' -H 'apikey: sb_publishable_7M26g3Zq1_7_rN6G1L1Nhw_ndBP490B' -H 'Authorization: Bearer sb_publishable_7M26g3Zq1_7_rN6G1L1Nhw_ndBP490B')",
+      "Bash(npm install:*)",
+      "Bash(curl -s http://localhost:3001/health)",
+      "Bash(cp -r /tmp/superpowers/.claude-plugin /Users/taherabharmal/LicenseAndPermitsNew/)",
+      "Bash(cp -r /tmp/superpowers/skills /Users/taherabharmal/LicenseAndPermitsNew/)",
+      "Bash(cp -r /tmp/superpowers/hooks /Users/taherabharmal/LicenseAndPermitsNew/)",
+      "Bash(cp -r /tmp/superpowers/commands /Users/taherabharmal/LicenseAndPermitsNew/)"
+    ]
+  }
+}

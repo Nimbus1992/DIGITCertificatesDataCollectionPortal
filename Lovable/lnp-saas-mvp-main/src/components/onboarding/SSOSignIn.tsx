@@ -1,20 +1,213 @@
-import React, { useState } from "react";
-import { ArrowLeft, Mail } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { ArrowLeft, Mail, Loader2, CheckCircle, LogOut, ArrowRight, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { loadUserData } from "@/lib/api";
+import { useOnboarding } from "@/contexts/OnboardingContext";
 import HelperText from "./HelperText";
 
-const SSOSignIn: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ onComplete, onBack }) => {
+type Mode = "signin" | "signup";
+
+const SSOSignIn: React.FC<{ onComplete: () => void; onBack: () => void }> = ({
+  onComplete,
+  onBack,
+}) => {
+  const { user, signOut } = useAuth();
+  const { syncFromSupabase } = useOnboarding();
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [continuing, setContinuing] = useState(false);
+  const [error, setError] = useState("");
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
+  // No auto-advance — we show the "already signed in" screen instead
+  // so the user always knows their auth state and can sign out if needed.
+
+  const handleContinueAsUser = async () => {
+    if (!user) return;
+    setContinuing(true);
+    try {
+      const data = await loadUserData(user.id);
+      if (data) syncFromSupabase(data);
+      onComplete();
+    } finally {
+      setContinuing(false);
+    }
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+    // stay on this screen — user will now see the normal sign-in form
+  };
+
+  const handleGoogle = async () => {
+    setError("");
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin + "/onboarding" },
+    });
+    if (error) {
+      if (error.message.toLowerCase().includes("provider") || error.message.toLowerCase().includes("not enabled")) {
+        setError("Google sign-in is not configured yet. Please use email/password below, or check the Supabase dashboard.");
+      } else {
+        setError(error.message);
+      }
+    }
+  };
+
+  const handleEmailSubmit = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError("Please enter your email and password.");
+      return;
+    }
+    setError("");
+    setLoading(true);
+
+    try {
+      if (mode === "signin") {
+        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+          if (error.message.toLowerCase().includes("invalid login") || error.message.toLowerCase().includes("invalid credentials")) {
+            setError("Incorrect email or password. Try again or switch to Sign Up.");
+          } else if (error.message.toLowerCase().includes("email not confirmed")) {
+            setError("Please confirm your email first — check your inbox for the confirmation link.");
+          } else {
+            setError(error.message);
+          }
+        }
+        // If no error, onAuthStateChange fires → useEffect above calls onComplete
+      } else {
+        const { data, error } = await supabase.auth.signUp({ email, password });
+        if (error) {
+          setError(error.message);
+          return;
+        }
+        // session is null when email confirmation is required
+        if (data.user && !data.session) {
+          setConfirmationSent(true);
+        }
+        // If session exists (email confirmation disabled), onAuthStateChange fires automatically
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ── Already signed in screen ─────────────────────────────
+  if (user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="max-w-md w-full mx-auto space-y-6 animate-slide-up">
+          <div className="text-center space-y-2">
+            <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
+              <User className="h-8 w-8 text-accent" />
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">You're signed in</h1>
+            <p className="text-muted-foreground text-sm">
+              Continue your setup with this account, or sign out to use a different one.
+            </p>
+          </div>
+
+          {/* Account card */}
+          <div className="rounded-xl border bg-card p-4 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
+              <span className="text-accent font-semibold text-sm">
+                {(user.email ?? "U")[0].toUpperCase()}
+              </span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{user.email}</p>
+              <p className="text-xs text-muted-foreground">Authenticated</p>
+            </div>
+            <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
+          </div>
+
+          <div className="space-y-3">
+            <Button
+              onClick={handleContinueAsUser}
+              disabled={continuing}
+              className="w-full bg-accent text-accent-foreground hover:bg-accent/90 h-11 gap-2"
+            >
+              {continuing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <ArrowRight className="h-4 w-4" />
+              )}
+              {continuing ? "Loading your data…" : "Continue as this account"}
+            </Button>
+
+            <Button
+              variant="outline"
+              onClick={handleSignOut}
+              className="w-full h-11 gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out and use a different account
+            </Button>
+          </div>
+
+          <div className="flex justify-start">
+            <Button variant="ghost" onClick={onBack} className="gap-1 text-muted-foreground">
+              <ArrowLeft className="h-4 w-4" /> Back
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Confirmation sent screen ──────────────────────────────
+  if (confirmationSent) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+        <div className="max-w-md w-full mx-auto text-center space-y-6 animate-slide-up">
+          <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto">
+            <CheckCircle className="h-8 w-8 text-accent" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold text-foreground">Check your email</h2>
+            <p className="text-muted-foreground">
+              We sent a confirmation link to <span className="font-medium text-foreground">{email}</span>.
+              Click it to verify your account, then come back here and sign in.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => { setConfirmationSent(false); setMode("signin"); }}
+            className="w-full"
+          >
+            Back to Sign In
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            No email? Check your spam folder, or{" "}
+            <button
+              onClick={() => setConfirmationSent(false)}
+              className="text-accent hover:underline"
+            >
+              try a different address
+            </button>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Main sign-in / sign-up form ───────────────────────────
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="max-w-md w-full mx-auto space-y-8 animate-slide-up">
         <div className="text-center space-y-2">
-          <h1 className="text-2xl font-bold text-foreground">Sign in to get started</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            {mode === "signin" ? "Sign in to get started" : "Create your account"}
+          </h1>
           <p className="text-muted-foreground">
-            Choose how you'd like to sign in. This helps us keep your setup secure.
+            {mode === "signin"
+              ? "Choose how you'd like to sign in. This helps us keep your setup secure."
+              : "Set up your account to save your progress and org data."}
           </p>
         </div>
 
@@ -25,7 +218,7 @@ const SSOSignIn: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ o
 
         {/* Google SSO */}
         <button
-          onClick={onComplete}
+          onClick={handleGoogle}
           className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg border border-border bg-card text-foreground font-medium hover:bg-accent/5 hover:border-accent/50 transition-all"
         >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -40,7 +233,9 @@ const SSOSignIn: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ o
         {/* Divider */}
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-border" />
-          <span className="text-sm text-muted-foreground">or sign in with email</span>
+          <span className="text-sm text-muted-foreground">
+            or {mode === "signin" ? "sign in" : "sign up"} with email
+          </span>
           <div className="flex-1 h-px bg-border" />
         </div>
 
@@ -52,27 +247,60 @@ const SSOSignIn: React.FC<{ onComplete: () => void; onBack: () => void }> = ({ o
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="h-12"
+            onKeyDown={(e) => e.key === "Enter" && handleEmailSubmit()}
           />
           <Input
             type="password"
-            placeholder="Password"
+            placeholder={mode === "signup" ? "Create a password (min 6 chars)" : "Password"}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="h-12"
+            onKeyDown={(e) => e.key === "Enter" && handleEmailSubmit()}
           />
+
+          {error && (
+            <p className="text-sm text-destructive bg-destructive/5 border border-destructive/20 rounded-md px-3 py-2">
+              {error}
+            </p>
+          )}
+
           <Button
-            onClick={onComplete}
+            onClick={handleEmailSubmit}
+            disabled={loading}
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90 h-11 gap-2"
           >
-            <Mail className="h-4 w-4" /> Sign In
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Mail className="h-4 w-4" />
+            )}
+            {loading ? "Please wait…" : mode === "signin" ? "Sign In" : "Create Account"}
           </Button>
         </div>
 
-        {/* Skip */}
-        <div className="text-center">
-          <button onClick={onComplete} className="text-sm text-muted-foreground hover:text-foreground transition-colors underline underline-offset-4">
-            Skip for now
-          </button>
+        {/* Mode toggle */}
+        <div className="text-center text-sm text-muted-foreground">
+          {mode === "signin" ? (
+            <>
+              Don't have an account?{" "}
+              <button
+                onClick={() => { setMode("signup"); setError(""); }}
+                className="text-accent hover:underline font-medium"
+              >
+                Sign up
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{" "}
+              <button
+                onClick={() => { setMode("signin"); setError(""); }}
+                className="text-accent hover:underline font-medium"
+              >
+                Sign in
+              </button>
+            </>
+          )}
         </div>
 
         {/* Back */}

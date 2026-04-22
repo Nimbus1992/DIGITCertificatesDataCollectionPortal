@@ -4,7 +4,7 @@ import { useOnboarding } from "@/contexts/OnboardingContext";
 import HelperText from "./HelperText";
 import { onboardingGuidance } from "@/data/onboardingGuidance";
 
-const setupSteps = [
+const ALL_SETUP_STEPS = [
   "Creating your organization",
   "Setting up your service",
   "Configuring forms and fields",
@@ -14,6 +14,12 @@ const setupSteps = [
 
 const AutoSetup: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const { state, updateState } = useOnboarding();
+
+  // When adding a second+ service the org already exists — skip that step.
+  const setupSteps = state.isAddingService
+    ? ALL_SETUP_STEPS.filter((s) => s !== "Creating your organization")
+    : ALL_SETUP_STEPS;
+
   const [completedSteps, setCompletedSteps] = useState<number[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const guidance = onboardingGuidance.autoSetup;
