@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --radius: 0.75rem;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'DM Sans', system-ui, -apple-system, sans-serif;
+    color: #1C2B3A;
+    background: #F2F2F2;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .dot-grid {
+    background-image: radial-gradient(circle, rgba(255,255,255,0.08) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  /* Reveal animation — content is visible by default; JS adds .animate to trigger fade-up */
+  .reveal.animate {
+    animation: fade-up 0.6s ease-out both;
+  }
+
+  .reveal.animate.reveal-delay-1 { animation-delay: 0.1s; }
+  .reveal.animate.reveal-delay-2 { animation-delay: 0.2s; }
+  .reveal.animate.reveal-delay-3 { animation-delay: 0.3s; }
+}

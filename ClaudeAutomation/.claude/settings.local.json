@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bun --version)",
+      "Bash(npm install *)",
+      "Bash(npm run *)",
+      "Bash(curl -s http://localhost:8080)",
+      "Bash(curl -s http://localhost:8081)",
+      "Bash(curl -s http://localhost:8082)",
+      "Bash(npx --version)",
+      "Bash(npx playwright *)",
+      "Bash(curl *)",
+      "Bash(mkdir -p \"/Users/taherabharmal/LicenseAndPermitsNew/ClaudeAutomation/Lovable code/CitizenApp/Citizen App LnP/src/test\")",
+      "Bash(mkdir -p \"/Users/taherabharmal/LicenseAndPermitsNew/ClaudeAutomation/Lovable code/CitizenApp/Citizen App LnP/screenshots\")",
+      "Bash(mkdir -p \"/Users/taherabharmal/LicenseAndPermitsNew/ClaudeAutomation/Lovable code/EmployeeApp/Employee App/src/test\")",
+      "Bash(mkdir -p \"/Users/taherabharmal/LicenseAndPermitsNew/ClaudeAutomation/Lovable code/EmployeeApp/Employee App/screenshots\")",
+      "Read(//Users/taherabharmal/LicenseAndPermitsNew/Code/Lovable/**)",
+      "Read(//Users/taherabharmal/LicenseAndPermitsNew/Code/backend/**)",
+      "Bash(lsof -ti:8080)",
+      "Bash(echo \"PID: $!\")",
+      "Bash(echo \"Dev server starting in background with PID $!\")",
+      "WebFetch(domain:digitlicensepermitsandcertificates.netlify.app)",
+      "Bash(python3 *)",
+      "Bash(xargs basename -a)",
+      "Bash(node -e ' *)",
+      "Bash(xargs -I{} basename {} .tsx)",
+      "Bash(node *)",
+      "Bash(echo \"Admin App PID: $!\")",
+      "Bash(echo \"Citizen App PID: $!\")",
+      "Bash(echo \"Employee App PID: $!\")",
+      "Read(//private/tmp/**)",
+      "Bash(xargs ls)"
+    ]
+  }
+}
