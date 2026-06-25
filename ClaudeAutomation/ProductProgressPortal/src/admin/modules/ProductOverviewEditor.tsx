@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../store/DataStore';
 import { Field, Textarea, ListEditor } from '../../components/Field';
 import type { ProductOverviewData } from '../../types';
+import { VisibilityBanner } from '../VisibilityBanner';
 
 export function ProductOverviewEditor() {
   const { data, set } = useStore();
@@ -18,10 +19,12 @@ export function ProductOverviewEditor() {
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
+    <>
+      <VisibilityBanner visKey="productOverview" label="Product Overview" />
+    <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-8">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Product Overview</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Product Overview</h2>
           <p className="text-gray-500 text-sm">Why this work exists</p>
         </div>
         <button
@@ -64,5 +67,6 @@ export function ProductOverviewEditor() {
         </Field>
       </div>
     </div>
+    </>
   );
 }

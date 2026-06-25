@@ -4,8 +4,10 @@ import { BudgetGauge } from '../../components/charts/BudgetGauge';
 import { EmptyState } from './S03_OKRProgress';
 import type { BudgetRow } from '../../types';
 
-function fmt(n: number) {
-  return n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
+function makeFmt(currency: 'INR' | 'USD') {
+  return (n: number) => currency === 'USD'
+    ? n.toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
+    : n.toLocaleString('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 });
 }
 
 function pct(numerator: number, denominator: number) {
@@ -23,7 +25,7 @@ function groupRows(rows: BudgetRow[]) {
   return map;
 }
 
-function WorkstreamBar({ consumed, budgeted, forecast }: { consumed: number; budgeted: number; forecast: number }) {
+function WorkstreamBar({ consumed, budgeted, forecast, fmt }: { consumed: number; budgeted: number; forecast: number; fmt: (n: number) => string }) {
   const isOverrun = forecast > budgeted;
   const barMax = Math.max(budgeted, forecast, 1);
   const consumedW = Math.min(consumed, budgeted) / barMax * 100;
@@ -52,6 +54,7 @@ function WorkstreamBar({ consumed, budgeted, forecast }: { consumed: number; bud
 export function S05_Budget() {
   const { data } = useStore();
   const rows = data.budget;
+  const fmt = makeFmt(data.budgetCurrency ?? 'INR');
 
   const totalBudgeted = rows.reduce((s, r) => s + r.budgeted, 0);
   const totalConsumed = rows.reduce((s, r) => s + r.consumed, 0);
@@ -77,9 +80,9 @@ export function S05_Budget() {
     setWsExpanded(p => { const k = wsKey(cat, ws); return { ...p, [k]: !p[k] }; });
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Budget & Financial Health</h2>
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Budget & Financial Health</h2>
         <p className="text-gray-500 text-sm">Investment utilization</p>
       </div>
 
@@ -143,6 +146,7 @@ export function S05_Budget() {
               </div>
             </div>
 
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
@@ -211,7 +215,7 @@ export function S05_Budget() {
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <WorkstreamBar consumed={wsConsumed} budgeted={wsBudgeted} forecast={wsForecast} />
+                                <WorkstreamBar consumed={wsConsumed} budgeted={wsBudgeted} forecast={wsForecast} fmt={fmt} />
                               </td>
                               <td className="px-4 py-3 text-right text-gray-600">{fmt(wsBudgeted)}</td>
                               <td className={`px-4 py-3 text-right font-semibold ${isOverrun ? 'text-red-600' : 'text-green-600'}`}>
@@ -223,7 +227,9 @@ export function S05_Budget() {
                                     ▲ +{fmt(overrunAmt)}
                                   </span>
                                 ) : (
-                                  <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-600 text-xs font-bold">✓</span>
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700 whitespace-nowrap">
+                                    ▼ −{fmt(wsBudgeted - wsForecast)}
+                                  </span>
                                 )}
                               </td>
                             </tr>
@@ -295,6 +301,7 @@ export function S05_Budget() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}

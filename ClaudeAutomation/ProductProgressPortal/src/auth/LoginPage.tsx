@@ -1,15 +1,17 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext';
-import { GoogleSignInButton } from './GoogleSignInButton';
 
 export function LoginPage() {
   const { loginWithPassword } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const redirectTo = new URLSearchParams(location.search).get('redirect') || '/';
 
   const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,7 +20,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await loginWithPassword(loginId, password);
-      navigate('/');
+      navigate(redirectTo, { replace: true });
     } catch {
       setError('Invalid login ID or password.');
     } finally {
@@ -26,11 +28,9 @@ export function LoginPage() {
     }
   };
 
-  const hasGoogleClientId = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-950 to-blue-800 flex items-center justify-center">
-      <div className="bg-white rounded-2xl shadow-2xl p-10 max-w-md w-full mx-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-6 sm:p-10 max-w-md w-full mx-4">
         {/* Header */}
         <div className="text-center mb-8">
           <div className="w-16 h-16 bg-blue-900 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -86,21 +86,6 @@ export function LoginPage() {
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
-
-        {/* Google sign-in — only rendered when client ID is configured */}
-        {hasGoogleClientId && (
-          <>
-            <div className="relative mb-6">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-200" />
-              </div>
-              <div className="relative flex justify-center">
-                <span className="bg-white px-3 text-xs text-gray-400">or</span>
-              </div>
-            </div>
-            <GoogleSignInButton />
-          </>
-        )}
 
         <p className="text-xs text-gray-400 mt-6 text-center">
           Access is restricted to authorised team members only.

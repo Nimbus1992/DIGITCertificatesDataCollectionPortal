@@ -1,8 +1,15 @@
 export type Status = 'Green' | 'Amber' | 'Red';
+
+export interface VersionMeta {
+  draftVersion: string;
+  publishedVersion?: string;
+  publishedAt?: string;
+  hasUnpublishedChanges: boolean;
+}
 export type OKRStatus = 'On Track' | 'Delayed' | 'Completed' | 'At Risk';
 export type RoadmapStatus = 'Completed' | 'In Progress' | 'Upcoming' | 'Delayed';
 export type DecisionStatus = 'Open' | 'Closed' | 'Pending';
-export type ConversationStage = 'Discovery' | 'Evaluation' | 'Proposal' | 'Pilot' | 'Blocked' | 'Closed';
+export type ConversationStage = 'Discover' | 'Sign Up' | 'Implement' | 'Use' | 'Expand';
 
 export interface PortalConfig {
   spreadsheetId: string;
@@ -22,7 +29,7 @@ export interface PortalConfig {
   };
 }
 
-export interface GoogleUser {
+export interface AppUser {
   email: string;
   name: string;
   picture: string;
@@ -39,6 +46,7 @@ export interface ExecSummaryData {
   budgetUtilized: number;
   roadmapProgress: number;
   successMetricProgress: number;
+  launchDate?: string;
   biggestWin: string;
   biggestRisk: string;
   mostImportantUpdate: string;
@@ -117,10 +125,41 @@ export interface Metric {
 export type ArtifactSection = 'DPI Adoption' | 'PLG Lifecycle' | 'Ecosystem Building';
 export type DPIStage = 'Discovery' | 'Design' | 'Build' | 'Adoption';
 
+export interface ArtifactCategory {
+  id: string;
+  name: string;
+  subcategories: string[];
+  visible: boolean;
+}
+
 export interface SectionVisibility {
   dpiAdoption: boolean;
   plgLifecycle: boolean;
   ecosystemBuilding: boolean;
+  // Exec nav sections
+  execSummary: boolean;
+  productOverview: boolean;
+  okrs: boolean;
+  roadmap: boolean;
+  budget: boolean;
+  deliverables: boolean;
+  conversations: boolean;
+  risks: boolean;
+  decisions: boolean;
+  changelog: boolean;
+  governance: boolean;
+  appendix: boolean;
+}
+
+export type GovernanceLevel = 'daily' | 'fortnightly' | 'exco' | 'quarterly';
+
+export interface GovernanceSession {
+  id: string;
+  level: GovernanceLevel;
+  date: string;
+  presentationLink?: string;
+  keyPoints: string[];
+  attendees?: string;
 }
 
 export interface Artifact {
@@ -132,9 +171,44 @@ export interface Artifact {
   link: string;
   version?: string;
   reviewedBy?: string;
-  section?: ArtifactSection;
-  stage?: DPIStage;
+  section?: string;
+  stage?: string;
   thumbnailUrl?: string;
+  heading?: string;
+  description?: string;
+}
+
+export type MilestoneStatus = 'Not Started' | 'In Progress' | 'Complete' | 'Delayed' | 'At Risk';
+
+export interface OKRTask {
+  id: string;
+  title: string;
+  owner: string;
+  committedDate: string;
+  revisedDate: string;
+  status: MilestoneStatus;
+  comments: string;
+  subtasks?: OKRTask[];
+}
+
+export interface OKRMilestone {
+  id: string;
+  title: string;
+  keyResult: string;
+  owner: string;
+  committedDate: string;
+  revisedDate: string;
+  status: MilestoneStatus;
+  comments: string;
+  tasks: OKRTask[];
+  quarter?: string;
+  rowType?: 'milestone' | 'launch';
+}
+
+export interface StageHistoryEntry {
+  stage: ConversationStage;
+  date: string;
+  comment: string;
 }
 
 export interface Conversation {
@@ -144,6 +218,9 @@ export interface Conversation {
   stage: ConversationStage;
   latestUpdate: string;
   nextStep: string;
+  partner?: string;
+  lastUpdateDate?: string;
+  stageHistory?: StageHistoryEntry[];
 }
 
 export type RiskCategory = 'Adoption' | 'Timeline' | 'Technical' | 'Security & Compliance' | 'Financial' | 'Other';
@@ -194,4 +271,60 @@ export interface TeamMember {
   engagement: TeamEngagement;
   photoUrl: string;
   utilization: number;
+}
+
+// ── Complaints (CMS) Roadmap ───────────────────────────────────────────────
+
+export type CmsItemColor = 'teal' | 'sky' | 'green' | 'purple' | 'orange' | 'navy' | 'maroon';
+
+export interface CmsRelease {
+  id: string;
+  name: string;
+  timeframe: string;
+  isCurrent?: boolean;
+  hasStar?: boolean;
+}
+
+export interface CmsGoalItem {
+  id: string;
+  text: string;
+  releaseId: string;
+  color: CmsItemColor;
+}
+
+export interface CmsFeatureItem {
+  id: string;
+  text: string;
+  releaseId: string;
+  color: CmsItemColor;
+}
+
+export interface CmsModuleGroup {
+  id: string;
+  modules: string[];
+  actors: string[];
+  items: CmsFeatureItem[];
+}
+
+export interface CmsUpdateLogEntry {
+  id: string;
+  date: string;
+  changes: string[];
+}
+
+export interface CmsTheme {
+  color: CmsItemColor;
+  label: string;
+}
+
+export interface CmsRoadmapData {
+  releases: CmsRelease[];
+  goals: CmsGoalItem[];
+  valueBundles: { releaseId: string; items: string[] }[];
+  successMetrics: { releaseId: string; items: string[] }[];
+  moduleGroups: CmsModuleGroup[];
+  updateLog: CmsUpdateLogEntry[];
+  themes: CmsTheme[];
+  masterModules: string[];
+  masterActors: string[];
 }

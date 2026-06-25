@@ -50,23 +50,23 @@ export function S02_ProductOverview() {
   const metrics = data.metrics;
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-10">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-10">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Product Overview & Success Metrics</h2>
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Product Overview & Success Metrics</h2>
         <p className="text-gray-500 text-sm">Why this work exists and how we measure success</p>
       </div>
 
       {/* Product Overview */}
       <section className="space-y-6">
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <InfoBlock title="Problem" content={d.problem} />
           <InfoBlock title="Vision" content={d.vision} />
         </div>
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <ListBlock title="Objectives" items={d.objectives} color="blue" />
           <ListBlock title="Target Users" items={d.targetUsers} color="purple" />
         </div>
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
           <ListBlock title="In Scope" items={d.inScope} color="green" />
           <ListBlock title="Out of Scope" items={d.outOfScope} color="red" />
           <ListBlock title="Strategic Alignment" items={d.strategicAlignment} color="amber" />
@@ -76,7 +76,7 @@ export function S02_ProductOverview() {
       {/* Product Goals */}
       <section>
         <h3 className="text-base font-bold text-gray-800 mb-3">Product Goals</h3>
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <GoalCard period="2030 Goal" goal="Light up 24 Countries" color="indigo" />
           <GoalCard period="1 Year Goal" goal="1 go live · 1 partner hosting SaaS" color="blue" />
         </div>
@@ -123,7 +123,7 @@ function ThemeBlock({ theme, metrics }: { theme: typeof THEME_CONFIG[0]; metrics
   return (
     <div className={`rounded-xl border ${s.bg} ${s.border} p-6`}>
       <span className={`inline-block text-xs font-bold uppercase tracking-widest px-2.5 py-1 rounded-full mb-4 ${s.badge}`}>{theme.key}</span>
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Product Goals</p>
           <ul className="space-y-1.5">

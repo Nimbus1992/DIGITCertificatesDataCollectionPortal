@@ -1,6 +1,5 @@
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { GoogleOAuthProvider } from '@react-oauth/google';
 import { DataStoreProvider } from './store/DataStore';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { LoginPage } from './auth/LoginPage';
@@ -8,7 +7,7 @@ import { LandingPage } from './LandingPage';
 import { ExecLayout } from './executive/ExecLayout';
 import { AdminLayout } from './admin/AdminLayout';
 import { AdminDashboard } from './admin/AdminDashboard';
-import { ExecSummaryEditor } from './admin/modules/ExecSummaryEditor';
+import { UserManagement } from './admin/UserManagement';
 import { ProductOverviewEditor } from './admin/modules/ProductOverviewEditor';
 import { OKREditor } from './admin/modules/OKREditor';
 import { BudgetEditor } from './admin/modules/BudgetEditor';
@@ -31,19 +30,46 @@ import { S09_Risks } from './executive/sections/S09_Risks';
 import { S10_DecisionLog } from './executive/sections/S10_DecisionLog';
 import { S11_Changelog } from './executive/sections/S11_Changelog';
 import { S12_Appendix } from './executive/sections/S12_Appendix';
+import { S_Governance } from './executive/sections/S_Governance';
+import { GovernanceEditor } from './admin/modules/GovernanceEditor';
 import { PRODUCTS } from './products';
 
-function RequireAuth({ children }: { children: ReactNode }) {
-  const { user, isLoading } = useAuth();
-  if (isLoading) return null;
-  return user ? <>{children}</> : <Navigate to="/login" replace />;
+// Checks the user is an admin for the product in the URL
+function RequireProductAdmin({ children }: { children: ReactNode }) {
+  const { user, isLoading, isAdminFor, isSuperAdmin } = useAuth();
+  const { productSlug } = useParams<{ productSlug: string }>();
+  const location = useLocation();
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (!user) return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  if (isSuperAdmin || (productSlug && isAdminFor(productSlug))) return <>{children}</>;
+  // Logged in but not admin for this product → back to exec view
+  return <Navigate to={`/${productSlug}/executive/summary`} replace />;
 }
 
-function ProductShell({ children }: { children: ReactNode }) {
+// Only the super admin can access this
+function RequireSuperAdmin({ children }: { children: ReactNode }) {
+  const { user, isLoading, isSuperAdmin } = useAuth();
+  const location = useLocation();
+  if (isLoading) return <div className="min-h-screen flex items-center justify-center"><div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" /></div>;
+  if (!user) return <Navigate to={`/login?redirect=${encodeURIComponent(location.pathname)}`} replace />;
+  if (!isSuperAdmin) return <Navigate to="/" replace />;
+  return <>{children}</>;
+}
+
+// Admin view reads/writes draft data (productSlug)
+function AdminProductShell({ children }: { children: ReactNode }) {
   const { productSlug } = useParams<{ productSlug: string }>();
   const validSlug = PRODUCTS.find(p => p.slug === productSlug && !p.comingSoon)?.slug;
   if (!validSlug) return <Navigate to="/" replace />;
   return <DataStoreProvider productId={validSlug}>{children}</DataStoreProvider>;
+}
+
+// Exec view reads only published data (productSlug_pub)
+function ExecProductShell({ children }: { children: ReactNode }) {
+  const { productSlug } = useParams<{ productSlug: string }>();
+  const validSlug = PRODUCTS.find(p => p.slug === productSlug && !p.comingSoon)?.slug;
+  if (!validSlug) return <Navigate to="/" replace />;
+  return <DataStoreProvider productId={`${validSlug}_pub`}>{children}</DataStoreProvider>;
 }
 
 function AppRoutes() {
@@ -52,8 +78,14 @@ function AppRoutes() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
 
+      {/* User management — super admin only */}
+      <Route path="/users" element={
+        <RequireSuperAdmin><UserManagement /></RequireSuperAdmin>
+      } />
+
+      {/* Executive portal — fully public, reads published data */}
       <Route path="/:productSlug/executive" element={
-        <RequireAuth><ProductShell><ExecLayout /></ProductShell></RequireAuth>
+        <ExecProductShell><ExecLayout /></ExecProductShell>
       }>
         <Route index element={<Navigate to="summary" replace />} />
         <Route path="summary" element={<S01_ExecSummary />} />
@@ -67,14 +99,17 @@ function AppRoutes() {
         <Route path="risks" element={<S09_Risks />} />
         <Route path="decisions" element={<S10_DecisionLog />} />
         <Route path="changelog" element={<S11_Changelog />} />
+        <Route path="governance" element={<S_Governance />} />
         <Route path="appendix" element={<S12_Appendix />} />
       </Route>
 
+      {/* Admin portal — product admin only, reads/writes draft data */}
       <Route path="/:productSlug/admin" element={
-        <RequireAuth><ProductShell><AdminLayout /></ProductShell></RequireAuth>
+        <RequireProductAdmin>
+          <AdminProductShell><AdminLayout /></AdminProductShell>
+        </RequireProductAdmin>
       }>
         <Route index element={<AdminDashboard />} />
-        <Route path="exec-summary" element={<ExecSummaryEditor />} />
         <Route path="product-overview" element={<ProductOverviewEditor />} />
         <Route path="okrs" element={<OKREditor />} />
         <Route path="budget" element={<BudgetEditor />} />
@@ -85,6 +120,7 @@ function AppRoutes() {
         <Route path="decisions" element={<DecisionEditor />} />
         <Route path="metrics" element={<MetricsEditor />} />
         <Route path="changelog" element={<ChangelogEditor />} />
+        <Route path="governance" element={<GovernanceEditor />} />
         <Route path="team" element={<TeamEditor />} />
       </Route>
 
@@ -95,12 +131,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''}>
-      <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </AuthProvider>
-    </GoogleOAuthProvider>
+    <AuthProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

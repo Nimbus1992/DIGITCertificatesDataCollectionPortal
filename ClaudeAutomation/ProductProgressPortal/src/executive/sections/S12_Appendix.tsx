@@ -1,14 +1,14 @@
 export function S12_Appendix() {
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Appendix</h2>
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Appendix</h2>
         <p className="text-gray-500 text-sm">Supporting information</p>
       </div>
       <div className="space-y-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Definitions</h3>
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {[
               ['OKR', 'Objective and Key Result — a goal-setting framework.'],
               ['Green', 'On track; no intervention required.'],
@@ -27,14 +27,14 @@ export function S12_Appendix() {
             ))}
           </div>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 md:p-6">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Reporting Methodology</h3>
           <ul className="space-y-2 text-sm text-gray-700">
             {[
               'Data is entered manually via the Admin Interface and stored in your browser\'s local storage.',
               'OKR progress is calculated as the average completion % across all Key Results under an Objective.',
               'Budget utilization is calculated as (Consumed / Budgeted) × 100 across all rows.',
-              'Risk probability and impact are rated on a 1–5 scale. Critical path risks are severity Critical or High.',
+              'Risk probability and impact are rated on a 1–5 scale (1 = Very Low, 5 = Very High). Ratings are entered by the Product Manager.',
               'Metric trends (Up/Down/Stable) are set manually in the Metrics Editor.',
             ].map((item, i) => (
               <li key={i} className="flex gap-2"><span className="text-blue-500 mt-0.5">•</span>{item}</li>

@@ -28,14 +28,14 @@ export function MetricsEditor() {
   const upd = <K extends keyof Metric>(k: K, v: Metric[K]) => setForm(f => ({ ...f, [k]: v }));
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-bold text-gray-900 mb-1">Metrics Editor</h2><p className="text-gray-500 text-sm">{rows.length} metrics</p></div>
+    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div><h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Metrics Editor</h2><p className="text-gray-500 text-sm">{rows.length} metrics</p></div>
         <button onClick={openAdd} className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">+ Add Metric</button>
       </div>
 
       {rows.length === 0 ? <Empty label="metrics" onAdd={openAdd} /> : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>{['Metric', 'Theme', 'Category', 'Target', 'Actual', 'Trend', 'Period', ''].map(h => (
@@ -63,7 +63,7 @@ export function MetricsEditor() {
       {modal.open && (
         <Modal title={modal.idx === null ? 'Add Metric' : 'Edit Metric'} onClose={() => setModal({ open: false, idx: null })} onSave={handleSave}>
           <Field label="Metric Name"><Input value={form.name} onChange={e => upd('name', e.target.value)} /></Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Theme">
               <Select value={form.theme ?? ''} onChange={e => upd('theme', e.target.value)}>
                 <option value="">— No theme —</option>

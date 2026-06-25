@@ -35,17 +35,17 @@ export function TeamEditor() {
   const upd = <K extends keyof TeamMember>(k: K, v: TeamMember[K]) => setForm(f => ({ ...f, [k]: v }));
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Team</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Team</h2>
           <p className="text-gray-500 text-sm">{totalMembers} members</p>
         </div>
         <button onClick={openAdd} className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">+ Add Member</button>
       </div>
 
       {rows.length === 0 ? <Empty label="team members" onAdd={openAdd} /> : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
@@ -99,7 +99,7 @@ export function TeamEditor() {
       {modal.open && (
         <Modal title={modal.idx === null ? 'Add Team Member' : 'Edit Team Member'} onClose={() => setModal({ open: false, idx: null })} onSave={handleSave}>
           <Field label="Name"><Input value={form.name} onChange={e => upd('name', e.target.value)} placeholder="Full name" /></Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Role">
               <Select value={form.role} onChange={e => upd('role', e.target.value as TeamRole)}>
                 {ROLES.map(r => <option key={r} value={r}>{r}</option>)}

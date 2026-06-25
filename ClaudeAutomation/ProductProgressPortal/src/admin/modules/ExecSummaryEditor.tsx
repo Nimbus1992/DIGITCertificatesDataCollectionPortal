@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../store/DataStore';
 import { Field, Input, Select, Textarea, ListEditor } from '../../components/Field';
 import type { ExecSummaryData, Status } from '../../types';
+import { VisibilityBanner } from '../VisibilityBanner';
 
 const STATUS_OPTIONS: Status[] = ['Green', 'Amber', 'Red'];
 
@@ -20,10 +21,12 @@ export function ExecSummaryEditor() {
   }
 
   return (
-    <div className="p-8 max-w-3xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
+    <>
+      <VisibilityBanner visKey="execSummary" label="Executive Summary" />
+    <div className="p-4 md:p-8 max-w-3xl mx-auto space-y-8">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Executive Summary</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Executive Summary</h2>
           <p className="text-gray-500 text-sm">Status indicators, KPIs, and highlights</p>
         </div>
         <button
@@ -36,7 +39,7 @@ export function ExecSummaryEditor() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Confidence Indicators</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {([
             ['overallStatus', 'Overall Status'],
             ['deliveryConfidence', 'Delivery Confidence'],
@@ -57,7 +60,7 @@ export function ExecSummaryEditor() {
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
         <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">KPI Numbers</h3>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {([
             ['okrsOnTrack', 'OKRs On Track (%)'],
             ['milestonesCompleted', 'Milestones Completed'],
@@ -76,6 +79,17 @@ export function ExecSummaryEditor() {
             </Field>
           ))}
         </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
+        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Launch Date</h3>
+        <Field label="Target Launch Date" hint="Shown as 'Days to launch' on the product listing page">
+          <Input
+            type="date"
+            value={form.launchDate ?? ''}
+            onChange={e => update('launchDate', e.target.value || undefined)}
+          />
+        </Field>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
@@ -104,5 +118,6 @@ export function ExecSummaryEditor() {
         </Field>
       </div>
     </div>
+    </>
   );
 }

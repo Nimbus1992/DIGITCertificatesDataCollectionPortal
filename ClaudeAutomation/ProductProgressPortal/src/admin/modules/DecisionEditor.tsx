@@ -3,6 +3,7 @@ import { useStore } from '../../store/DataStore';
 import { Modal } from '../../components/Modal';
 import { Field, Input, Select, Textarea } from '../../components/Field';
 import { Empty, RowActions } from './OKREditor';
+import { VisibilityBanner } from '../VisibilityBanner';
 import type { Decision, DecisionStatus } from '../../types';
 
 const EMPTY: Decision = { decision: '', date: '', owner: '', context: '', tradeoff: '', outcome: '', status: 'Open' };
@@ -28,9 +29,11 @@ export function DecisionEditor() {
   const upd = <K extends keyof Decision>(k: K, v: Decision[K]) => setForm(f => ({ ...f, [k]: v }));
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-bold text-gray-900 mb-1">Decision Log</h2><p className="text-gray-500 text-sm">{rows.length} decisions recorded</p></div>
+    <>
+      <VisibilityBanner visKey="decisions" label="Decision Log" />
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div><h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Decision Log</h2><p className="text-gray-500 text-sm">{rows.length} decisions recorded</p></div>
         <button onClick={openAdd} className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">+ Add Decision</button>
       </div>
 
@@ -58,7 +61,7 @@ export function DecisionEditor() {
       {modal.open && (
         <Modal title={modal.idx === null ? 'Add Decision' : 'Edit Decision'} onClose={() => setModal({ open: false, idx: null })} onSave={handleSave} wide>
           <Field label="Decision"><Textarea value={form.decision} onChange={e => upd('decision', e.target.value)} rows={2} /></Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Date"><Input type="date" value={form.date} onChange={e => upd('date', e.target.value)} /></Field>
             <Field label="Owner"><Input value={form.owner} onChange={e => upd('owner', e.target.value)} /></Field>
             <Field label="Status">
@@ -73,5 +76,6 @@ export function DecisionEditor() {
         </Modal>
       )}
     </div>
+    </>
   );
 }

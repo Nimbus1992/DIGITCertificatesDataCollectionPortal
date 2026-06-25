@@ -21,10 +21,10 @@ export function S11_Changelog() {
   }, {});
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Changelog</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Changelog</h2>
           <p className="text-gray-500 text-sm">What changed and when</p>
         </div>
         <div className="flex gap-2 bg-gray-100 rounded-lg p-1">

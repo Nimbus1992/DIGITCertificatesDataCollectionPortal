@@ -1,7 +1,10 @@
 import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useStore } from '../../store/DataStore';
 import { StatusBadge } from '../../components/StatusBadge';
 import { EmptyState } from './S03_OKRProgress';
+import { CmsRoadmap } from './S04_ComplaintsRoadmap';
+import { StudioRoadmap } from './S04_StudioRoadmap';
 import type { RoadmapItem, Status } from '../../types';
 
 const STATUS_STYLE: Record<RoadmapItem['status'], string> = {
@@ -10,16 +13,24 @@ const STATUS_STYLE: Record<RoadmapItem['status'], string> = {
 };
 
 export function S04_Roadmap() {
+  const { productSlug } = useParams<{ productSlug: string }>();
+  if (productSlug === 'cms') return <CmsRoadmap />;
+  if (productSlug === 'studio') return <StudioRoadmap />;
+
   const { data } = useStore();
   const items = data.roadmap;
   const [view, setView] = useState<'timeline' | 'quarter'>('quarter');
   const quarters = [...new Set(items.map(i => i.quarter).filter(Boolean))].sort();
 
+  const inScope = data.productOverview?.inScope ?? [];
+  const outOfScope = data.productOverview?.outOfScope ?? [];
+  const hasScope = inScope.length > 0 || outOfScope.length > 0;
+
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Roadmap</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Roadmap</h2>
           <p className="text-gray-500 text-sm">Where we are and where we're headed</p>
         </div>
         <div className="flex gap-2 bg-gray-100 rounded-lg p-1">
@@ -28,6 +39,59 @@ export function S04_Roadmap() {
           ))}
         </div>
       </div>
+
+      {/* Roadmap comment banner */}
+      {(data.roadmapComment ?? '') && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-5 py-4 mb-6">
+          <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">Note from Product Team</p>
+          <p className="text-sm text-amber-900 whitespace-pre-wrap">{data.roadmapComment}</p>
+        </div>
+      )}
+
+      {/* Scope Overview */}
+      {hasScope && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Scope Overview</h3>
+          </div>
+          <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+            <div className="p-5">
+              <p className="text-xs font-semibold text-green-700 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-green-500" />
+                In Scope
+              </p>
+              {inScope.length === 0
+                ? <p className="text-xs text-gray-400 italic">Not defined</p>
+                : <ul className="space-y-2">
+                    {inScope.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="text-green-500 mt-0.5 shrink-0">✓</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+              }
+            </div>
+            <div className="p-5">
+              <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-3 flex items-center gap-1.5">
+                <span className="inline-block w-2 h-2 rounded-full bg-red-400" />
+                Out of Scope
+              </p>
+              {outOfScope.length === 0
+                ? <p className="text-xs text-gray-400 italic">Not defined</p>
+                : <ul className="space-y-2">
+                    {outOfScope.map((item, i) => (
+                      <li key={i} className="flex items-start gap-2 text-sm text-gray-700">
+                        <span className="text-red-400 mt-0.5 shrink-0">✕</span>
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+              }
+            </div>
+          </div>
+        </div>
+      )}
 
       {items.length === 0 ? <EmptyState label="Roadmap" adminPath="/admin/roadmap" /> : (
         <>

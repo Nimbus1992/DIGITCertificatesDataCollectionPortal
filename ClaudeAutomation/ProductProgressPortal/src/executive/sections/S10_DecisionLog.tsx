@@ -51,9 +51,9 @@ export function S10_DecisionLog() {
   const closed = decisions.filter(d => d.status === 'Closed');
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-8">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-1">Decision Log</h2>
+        <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Decision Log</h2>
         <p className="text-gray-500 text-sm">Key decisions and outcomes</p>
       </div>
 

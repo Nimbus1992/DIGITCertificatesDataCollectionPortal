@@ -4,15 +4,10 @@ import { Modal } from '../../components/Modal';
 import { Field, Input, Select, Textarea } from '../../components/Field';
 import { Empty, RowActions } from './OKREditor';
 import type { Risk, RiskCategory } from '../../types';
+import { VisibilityBanner } from '../VisibilityBanner';
 
 const EMPTY: Risk = { description: '', severity: 'Medium', category: undefined, probability: 3, impact: 3, owner: '', mitigation: '', eta: '', status: 'Open' };
-const SEVERITIES: Risk['severity'][] = ['Critical', 'High', 'Medium', 'Low'];
 const CATEGORIES: RiskCategory[] = ['Adoption', 'Timeline', 'Technical', 'Security & Compliance', 'Financial', 'Other'];
-
-const SEV_STYLE: Record<Risk['severity'], string> = {
-  Critical: 'bg-red-100 text-red-900', High: 'bg-orange-100 text-orange-900',
-  Medium: 'bg-amber-100 text-amber-900', Low: 'bg-green-100 text-green-900',
-};
 
 const CAT_STYLE: Record<RiskCategory, string> = {
   'Adoption': 'bg-blue-100 text-blue-800',
@@ -47,10 +42,12 @@ export function RiskEditor() {
   const uncategorised = rows.filter(r => !r.category);
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <>
+      <VisibilityBanner visKey="risks" label="Risk Registry" />
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Risk Registry</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Risk Registry</h2>
           <p className="text-gray-500 text-sm">{rows.length} risks logged</p>
         </div>
         <button onClick={openAdd} className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">+ Add Risk</button>
@@ -64,9 +61,10 @@ export function RiskEditor() {
                 <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${CAT_STYLE[cat as RiskCategory] ?? 'bg-slate-100 text-slate-700'}`}>{cat}</span>
                 <span className="text-xs text-gray-400">{items.length} {items.length === 1 ? 'risk' : 'risks'}</span>
               </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="border-b border-gray-100">
-                  <tr>{['Description', 'Severity', 'P', 'I', 'Mitigation Strategy', 'Owner', 'Status', 'ETA', ''].map(h => (
+                  <tr>{['Description', 'Probability', 'Impact', 'Mitigation Strategy', 'Owner', 'Status', 'ETA', ''].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
                   ))}</tr>
                 </thead>
@@ -76,7 +74,6 @@ export function RiskEditor() {
                     return (
                       <tr key={i} className="hover:bg-gray-50">
                         <td className="px-4 py-3 text-gray-800 text-xs max-w-[200px]">{row.description}</td>
-                        <td className="px-4 py-3"><span className={`text-xs px-2 py-0.5 rounded-full font-medium ${SEV_STYLE[row.severity]}`}>{row.severity}</span></td>
                         <td className="px-4 py-3 text-gray-600 text-xs text-center">{row.probability}</td>
                         <td className="px-4 py-3 text-gray-600 text-xs text-center">{row.impact}</td>
                         <td className="px-4 py-3 text-gray-600 text-xs max-w-[220px]">{row.mitigation || <span className="text-gray-300 italic">—</span>}</td>
@@ -89,6 +86,7 @@ export function RiskEditor() {
                   })}
                 </tbody>
               </table>
+              </div>
             </div>
           ))}
         </div>
@@ -97,16 +95,11 @@ export function RiskEditor() {
       {modal.open && (
         <Modal title={modal.idx === null ? 'Add Risk' : 'Edit Risk'} onClose={() => setModal({ open: false, idx: null })} onSave={handleSave} wide>
           <Field label="Description"><Textarea value={form.description} onChange={e => upd('description', e.target.value)} /></Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Category">
               <Select value={form.category ?? ''} onChange={e => upd('category', (e.target.value || undefined) as RiskCategory | undefined)}>
                 <option value="">— Select category —</option>
                 {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-              </Select>
-            </Field>
-            <Field label="Severity">
-              <Select value={form.severity} onChange={e => upd('severity', e.target.value as Risk['severity'])}>
-                {SEVERITIES.map(s => <option key={s} value={s}>{s}</option>)}
               </Select>
             </Field>
             <Field label="Probability (1–5)" hint="5 = most likely"><Input type="number" min={1} max={5} value={form.probability} onChange={e => upd('probability', Number(e.target.value))} /></Field>
@@ -119,5 +112,6 @@ export function RiskEditor() {
         </Modal>
       )}
     </div>
+    </>
   );
 }

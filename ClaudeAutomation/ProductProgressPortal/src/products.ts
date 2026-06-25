@@ -32,7 +32,7 @@ export const PRODUCTS = [
     name: 'DIGIT Studio',
     description: 'Low-code configuration studio for designing and deploying DIGIT platform modules without engineering effort.',
     color: 'gray',
-    comingSoon: true,
+    comingSoon: false,
   },
 ] as const;
 

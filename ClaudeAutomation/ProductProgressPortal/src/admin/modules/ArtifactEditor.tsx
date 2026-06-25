@@ -3,64 +3,49 @@ import { useStore } from '../../store/DataStore';
 import { Modal } from '../../components/Modal';
 import { Field, Input, Select } from '../../components/Field';
 import { Empty, RowActions } from './OKREditor';
-import type { Artifact, ArtifactSection, DPIStage, SectionVisibility } from '../../types';
+import { VisibilityBanner } from '../VisibilityBanner';
+import type { Artifact, ArtifactCategory } from '../../types';
 
-const EMPTY: Artifact = {
+const EMPTY_ARTIFACT: Artifact = {
   title: '', type: 'PRD', owner: '', date: '', status: 'Draft',
-  link: '', version: '', reviewedBy: '',
-  section: 'DPI Adoption', stage: 'Discovery', thumbnailUrl: '',
+  link: '', version: '', reviewedBy: '', section: '', stage: '', thumbnailUrl: '',
+  heading: '', description: '',
 };
+
+const EMPTY_CATEGORY: { name: string; subcats: string } = { name: '', subcats: '' };
 
 const TYPES = ['Web Page', 'Deck', 'Git Link', 'Report', 'Pitch Deck', 'Prototype', 'PRD', 'Tech Design', 'Research', 'Meeting Notes', 'Decision Doc'];
 const STATUSES = ['Draft', 'In Progress', 'Review', 'Complete'];
-const SECTIONS: ArtifactSection[] = ['DPI Adoption', 'PLG Lifecycle', 'Ecosystem Building'];
-const DPI_STAGES: DPIStage[] = ['Discovery', 'Design', 'Build', 'Adoption'];
 
-const SECTION_VIS_KEY: Record<ArtifactSection, keyof SectionVisibility> = {
-  'DPI Adoption':       'dpiAdoption',
-  'PLG Lifecycle':      'plgLifecycle',
-  'Ecosystem Building': 'ecosystemBuilding',
-};
+const CATEGORY_COLORS = [
+  { badge: 'bg-blue-50 text-blue-700 border border-blue-200',   toggle: 'bg-blue-600',   headerBg: 'bg-blue-50',   headerText: 'text-blue-800' },
+  { badge: 'bg-purple-50 text-purple-700 border border-purple-200', toggle: 'bg-purple-600', headerBg: 'bg-purple-50', headerText: 'text-purple-800' },
+  { badge: 'bg-emerald-50 text-emerald-700 border border-emerald-200', toggle: 'bg-emerald-600', headerBg: 'bg-emerald-50', headerText: 'text-emerald-800' },
+  { badge: 'bg-amber-50 text-amber-700 border border-amber-200',  toggle: 'bg-amber-600',  headerBg: 'bg-amber-50',  headerText: 'text-amber-800' },
+  { badge: 'bg-rose-50 text-rose-700 border border-rose-200',    toggle: 'bg-rose-600',   headerBg: 'bg-rose-50',   headerText: 'text-rose-800' },
+];
 
-const SECTION_DESC: Record<ArtifactSection, string> = {
-  'DPI Adoption':       'Discovery → Design → Build → Adoption',
-  'PLG Lifecycle':      'Product-led growth lifecycle assets',
-  'Ecosystem Building': 'Partner and ecosystem development assets',
-};
+function genId() {
+  return Math.random().toString(36).slice(2, 9);
+}
 
-const SECTION_BADGE: Record<ArtifactSection, string> = {
-  'DPI Adoption':       'bg-blue-50 text-blue-700 border border-blue-200',
-  'PLG Lifecycle':      'bg-purple-50 text-purple-700 border border-purple-200',
-  'Ecosystem Building': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-};
-
-const SECTION_TOGGLE: Record<ArtifactSection, string> = {
-  'DPI Adoption':       'bg-blue-600',
-  'PLG Lifecycle':      'bg-purple-600',
-  'Ecosystem Building': 'bg-emerald-600',
-};
-
-const SECTION_HEADER_BG: Record<ArtifactSection, string> = {
-  'DPI Adoption':       'bg-blue-50',
-  'PLG Lifecycle':      'bg-purple-50',
-  'Ecosystem Building': 'bg-emerald-50',
-};
-
-const SECTION_HEADER_TEXT: Record<ArtifactSection, string> = {
-  'DPI Adoption':       'text-blue-800',
-  'PLG Lifecycle':      'text-purple-800',
-  'Ecosystem Building': 'text-emerald-800',
-};
+function getCatColor(idx: number) {
+  return CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+}
 
 export function ArtifactEditor() {
   const { data, set } = useStore();
   const [modal, setModal] = useState<{ open: boolean; idx: number | null }>({ open: false, idx: null });
-  const [form, setForm] = useState<Artifact>(EMPTY);
+  const [form, setForm] = useState<Artifact>(EMPTY_ARTIFACT);
+
+  // Category management
+  const [catModal, setCatModal] = useState<{ open: boolean; idx: number | null }>({ open: false, idx: null });
+  const [catForm, setCatForm] = useState<{ name: string; subcats: string }>(EMPTY_CATEGORY);
 
   const rows = data.artifacts;
-  const vis = data.sectionVisibility;
+  const categories: ArtifactCategory[] = data.artifactCategories ?? [];
 
-  function openAdd() { setForm(EMPTY); setModal({ open: true, idx: null }); }
+  function openAdd() { setForm(EMPTY_ARTIFACT); setModal({ open: true, idx: null }); }
   function openEdit(idx: number) { setForm({ ...rows[idx] }); setModal({ open: true, idx }); }
   function handleSave() {
     if (modal.idx === null) set('artifacts', [...rows, form]);
@@ -71,25 +56,49 @@ export function ArtifactEditor() {
   const upd = <K extends keyof Artifact>(k: K, v: Artifact[K]) => setForm(f => ({ ...f, [k]: v }));
 
   function handleSectionChange(val: string) {
-    const sec = val as ArtifactSection | '';
-    setForm(f => ({
-      ...f,
-      section: sec || undefined,
-      stage: sec === 'DPI Adoption' ? f.stage : undefined,
-    }));
+    setForm(f => ({ ...f, section: val || undefined, stage: undefined }));
   }
 
-  function toggleVis(key: keyof SectionVisibility) {
-    set('sectionVisibility', { ...vis, [key]: !vis[key] });
+  // Category management handlers
+  function openAddCategory() { setCatForm(EMPTY_CATEGORY); setCatModal({ open: true, idx: null }); }
+  function openEditCategory(idx: number) {
+    const cat = categories[idx];
+    setCatForm({ name: cat.name, subcats: cat.subcategories.join(', ') });
+    setCatModal({ open: true, idx });
+  }
+  function handleSaveCategory() {
+    const name = catForm.name.trim();
+    if (!name) return;
+    const subcategories = catForm.subcats.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+    const next = [...categories];
+    if (catModal.idx === null) {
+      next.push({ id: genId(), name, subcategories, visible: true });
+    } else {
+      next[catModal.idx] = { ...next[catModal.idx], name, subcategories };
+    }
+    set('artifactCategories', next);
+    setCatModal({ open: false, idx: null });
+  }
+  function deleteCategory(idx: number) {
+    if (!confirm(`Delete category "${categories[idx].name}"? Artifacts assigned to it will become unassigned.`)) return;
+    set('artifactCategories', categories.filter((_, i) => i !== idx));
+  }
+  function toggleCategoryVisible(idx: number) {
+    const next = [...categories];
+    next[idx] = { ...next[idx], visible: !next[idx].visible };
+    set('artifactCategories', next);
   }
 
-  const bySec = (sec: ArtifactSection) => rows.filter(r => r.section === sec);
+  const byCategory = (name: string) => rows.filter(r => r.section === name);
+  const selectedCategory = categories.find(c => c.name === form.section);
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
+    <>
+      <VisibilityBanner visKey="deliverables" label="Key Assets" />
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-1">Key Assets</h2>
+          <h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Key Assets</h2>
           <p className="text-gray-500 text-sm">{rows.length} total assets</p>
         </div>
         <button onClick={openAdd} className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">
@@ -97,74 +106,95 @@ export function ArtifactEditor() {
         </button>
       </div>
 
-      {/* Section Visibility Panel */}
+      {/* Category Management Panel */}
       <div className="bg-gray-50 rounded-xl border border-gray-200 p-5">
-        <h3 className="text-sm font-semibold text-gray-700 mb-4">Section Visibility</h3>
-        <div className="grid grid-cols-3 gap-4">
-          {SECTIONS.map(sec => {
-            const visKey = SECTION_VIS_KEY[sec];
-            const on = vis[visKey];
-            return (
-              <div key={sec} className={`bg-white rounded-lg border border-gray-200 p-4 transition-opacity ${!on ? 'opacity-50' : ''}`}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${SECTION_BADGE[sec]}`}>{sec}</span>
-                  <button
-                    onClick={() => toggleVis(visKey)}
-                    className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${on ? SECTION_TOGGLE[sec] : 'bg-gray-300'}`}
-                  >
-                    <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${on ? 'translate-x-5' : 'translate-x-1'}`} />
-                  </button>
-                </div>
-                <p className="text-xs text-gray-400">{SECTION_DESC[sec]}</p>
-                <p className="text-xs font-medium text-gray-600 mt-1">
-                  {bySec(sec).length} asset{bySec(sec).length !== 1 ? 's' : ''}
-                </p>
-              </div>
-            );
-          })}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-700">Categories</h3>
+            <p className="text-xs text-gray-400 mt-0.5">Manage asset categories and their subcategories. Toggle visibility.</p>
+          </div>
+          <button
+            onClick={openAddCategory}
+            className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+          >
+            + Add Category
+          </button>
         </div>
+        {categories.length === 0 ? (
+          <p className="text-sm text-gray-400">No categories yet. Add one to organize assets.</p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {categories.map((cat, idx) => {
+              const col = getCatColor(idx);
+              const count = byCategory(cat.name).length;
+              return (
+                <div key={cat.id} className={`bg-white rounded-lg border border-gray-200 p-4 transition-opacity ${!cat.visible ? 'opacity-50' : ''}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${col.badge}`}>{cat.name}</span>
+                    <button
+                      onClick={() => toggleCategoryVisible(idx)}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${cat.visible ? col.toggle : 'bg-gray-300'}`}
+                    >
+                      <span className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${cat.visible ? 'translate-x-5' : 'translate-x-1'}`} />
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mb-1">
+                    {cat.subcategories.length > 0 ? cat.subcategories.join(' · ') : 'No subcategories'}
+                  </p>
+                  <p className="text-xs font-medium text-gray-600">{count} asset{count !== 1 ? 's' : ''}</p>
+                  <div className="flex gap-3 mt-3 pt-2 border-t border-gray-100">
+                    <button onClick={() => openEditCategory(idx)} className="text-xs text-blue-600 hover:underline">Edit</button>
+                    <button onClick={() => deleteCategory(idx)} className="text-xs text-red-500 hover:underline">Delete</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Asset table grouped by section */}
+      {/* Asset table grouped by category */}
       {rows.length === 0 ? <Empty label="key assets" onAdd={openAdd} /> : (
         <div className="space-y-6">
-          {SECTIONS.map(sec => {
-            const sRows = bySec(sec);
+          {categories.map((cat, idx) => {
+            const sRows = byCategory(cat.name);
             if (sRows.length === 0) return null;
-            const isDPI = sec === 'DPI Adoption';
+            const col = getCatColor(idx);
             return (
-              <div key={sec} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <div className={`px-5 py-3 border-b border-gray-200 flex items-center gap-3 ${SECTION_HEADER_BG[sec]}`}>
-                  <span className={`font-semibold text-sm ${SECTION_HEADER_TEXT[sec]}`}>{sec}</span>
+              <div key={cat.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className={`px-5 py-3 border-b border-gray-200 flex items-center gap-3 ${col.headerBg}`}>
+                  <span className={`font-semibold text-sm ${col.headerText}`}>{cat.name}</span>
                   <span className="text-xs text-gray-400">{sRows.length} asset{sRows.length !== 1 ? 's' : ''}</span>
-                  {isDPI && <span className="text-xs text-gray-400 ml-1">· Discovery · Design · Build · Adoption</span>}
+                  {cat.subcategories.length > 0 && (
+                    <span className="text-xs text-gray-400 ml-1">· {cat.subcategories.join(' · ')}</span>
+                  )}
                 </div>
-                {isDPI ? (
+                {cat.subcategories.length > 0 ? (
                   <>
-                    {DPI_STAGES.map(stage => {
-                      const stRows = sRows.filter(r => r.stage === stage);
-                      if (stRows.length === 0) return null;
+                    {cat.subcategories.map(sub => {
+                      const subRows = sRows.filter(r => r.stage === sub);
+                      if (subRows.length === 0) return null;
                       return (
-                        <div key={stage}>
+                        <div key={sub}>
                           <div className="px-5 py-2 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{stage}</span>
-                            <span className="text-xs text-gray-400">({stRows.length})</span>
+                            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{sub}</span>
+                            <span className="text-xs text-gray-400">({subRows.length})</span>
                           </div>
-                          <AssetTableBody rows={stRows} allRows={rows} onEdit={openEdit} onDelete={(idx) => set('artifacts', rows.filter((_, i) => i !== idx))} />
+                          <AssetTableBody rows={subRows} allRows={rows} onEdit={openEdit} onDelete={(i) => set('artifacts', rows.filter((_, j) => j !== i))} />
                         </div>
                       );
                     })}
                     {sRows.filter(r => !r.stage).length > 0 && (
                       <div>
                         <div className="px-5 py-2 bg-gray-50 border-b border-gray-100">
-                          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">No Stage</span>
+                          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">No Subcategory</span>
                         </div>
-                        <AssetTableBody rows={sRows.filter(r => !r.stage)} allRows={rows} onEdit={openEdit} onDelete={(idx) => set('artifacts', rows.filter((_, i) => i !== idx))} />
+                        <AssetTableBody rows={sRows.filter(r => !r.stage)} allRows={rows} onEdit={openEdit} onDelete={(i) => set('artifacts', rows.filter((_, j) => j !== i))} />
                       </div>
                     )}
                   </>
                 ) : (
-                  <AssetTableBody rows={sRows} allRows={rows} onEdit={openEdit} onDelete={(idx) => set('artifacts', rows.filter((_, i) => i !== idx))} />
+                  <AssetTableBody rows={sRows} allRows={rows} onEdit={openEdit} onDelete={(i) => set('artifacts', rows.filter((_, j) => j !== i))} />
                 )}
               </div>
             );
@@ -176,27 +206,40 @@ export function ArtifactEditor() {
                 <span className="font-semibold text-sm text-gray-600">Unassigned</span>
                 <span className="text-xs text-gray-400">{rows.filter(r => !r.section).length} asset{rows.filter(r => !r.section).length !== 1 ? 's' : ''}</span>
               </div>
-              <AssetTableBody rows={rows.filter(r => !r.section)} allRows={rows} onEdit={openEdit} onDelete={(idx) => set('artifacts', rows.filter((_, i) => i !== idx))} />
+              <AssetTableBody rows={rows.filter(r => !r.section)} allRows={rows} onEdit={openEdit} onDelete={(i) => set('artifacts', rows.filter((_, j) => j !== i))} />
             </div>
           )}
         </div>
       )}
 
+      {/* Artifact modal */}
       {modal.open && (
         <Modal title={modal.idx === null ? 'Add Asset' : 'Edit Asset'} onClose={() => setModal({ open: false, idx: null })} onSave={handleSave} wide>
           <Field label="Title"><Input value={form.title} onChange={e => upd('title', e.target.value)} /></Field>
-          <div className="grid grid-cols-2 gap-4">
+          <Field label="Heading" hint="A short tagline or positioning headline for this asset.">
+            <Input value={form.heading ?? ''} onChange={e => upd('heading', e.target.value)} placeholder="e.g. Foundational research underpinning the LnP design" />
+          </Field>
+          <Field label="Description" hint="Brief description of what this asset covers (shown on the card in the executive view).">
+            <textarea
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400"
+              rows={3}
+              value={form.description ?? ''}
+              onChange={e => upd('description', e.target.value)}
+              placeholder="Summarise what this document contains and why it matters…"
+            />
+          </Field>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Section">
               <Select value={form.section ?? ''} onChange={e => handleSectionChange(e.target.value)}>
                 <option value="">— No Section —</option>
-                {SECTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                {categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
               </Select>
             </Field>
-            {form.section === 'DPI Adoption' && (
-              <Field label="Stage">
-                <Select value={form.stage ?? ''} onChange={e => upd('stage', (e.target.value as DPIStage) || undefined)}>
-                  <option value="">— No Stage —</option>
-                  {DPI_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
+            {selectedCategory && selectedCategory.subcategories.length > 0 && (
+              <Field label="Subcategory">
+                <Select value={form.stage ?? ''} onChange={e => upd('stage', e.target.value || undefined)}>
+                  <option value="">— None —</option>
+                  {selectedCategory.subcategories.map(s => <option key={s} value={s}>{s}</option>)}
                 </Select>
               </Field>
             )}
@@ -221,7 +264,32 @@ export function ArtifactEditor() {
           </Field>
         </Modal>
       )}
+
+      {/* Category modal */}
+      {catModal.open && (
+        <Modal
+          title={catModal.idx === null ? 'Add Category' : 'Edit Category'}
+          onClose={() => setCatModal({ open: false, idx: null })}
+          onSave={handleSaveCategory}
+        >
+          <Field label="Category Name">
+            <Input
+              value={catForm.name}
+              onChange={e => setCatForm(f => ({ ...f, name: e.target.value }))}
+              placeholder="e.g. DPI Adoption"
+            />
+          </Field>
+          <Field label="Subcategories" hint="Comma-separated. Leave blank if none.">
+            <Input
+              value={catForm.subcats}
+              onChange={e => setCatForm(f => ({ ...f, subcats: e.target.value }))}
+              placeholder="e.g. Discovery, Design, Build, Adoption"
+            />
+          </Field>
+        </Modal>
+      )}
     </div>
+    </>
   );
 }
 
@@ -234,38 +302,40 @@ function AssetTableBody({
   onDelete: (idx: number) => void;
 }) {
   return (
-    <table className="w-full text-sm">
-      <thead className="border-b border-gray-100">
-        <tr>
-          {['Title', 'Type', 'Owner', 'Date', 'Status', 'Version', 'Reviewed By', 'Link', ''].map(h => (
-            <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody className="divide-y divide-gray-50">
-        {rows.map(row => {
-          const idx = allRows.indexOf(row);
-          return (
-            <tr key={idx} className="hover:bg-gray-50">
-              <td className="px-4 py-3 font-medium text-gray-900">{row.title}</td>
-              <td className="px-4 py-3 text-gray-600 text-xs">{row.type}</td>
-              <td className="px-4 py-3 text-gray-600 text-xs">{row.owner}</td>
-              <td className="px-4 py-3 text-gray-600 text-xs">{row.date}</td>
-              <td className="px-4 py-3 text-gray-600 text-xs">{row.status}</td>
-              <td className="px-4 py-3 text-gray-600 text-xs">{row.version ?? '—'}</td>
-              <td className="px-4 py-3 text-gray-600 text-xs">{row.reviewedBy ?? '—'}</td>
-              <td className="px-4 py-3 text-xs">
-                {row.link
-                  ? <a href={/^https?:\/\//i.test(row.link) ? row.link : `https://${row.link}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Open ↗</a>
-                  : '—'}
-              </td>
-              <td className="px-4 py-3">
-                <RowActions onEdit={() => onEdit(idx)} onDelete={() => onDelete(idx)} />
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead className="border-b border-gray-100">
+          <tr>
+            {['Title', 'Type', 'Owner', 'Date', 'Status', 'Version', 'Reviewed By', 'Link', ''].map(h => (
+              <th key={h} className="px-4 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-50">
+          {rows.map(row => {
+            const idx = allRows.indexOf(row);
+            return (
+              <tr key={idx} className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-medium text-gray-900">{row.title}</td>
+                <td className="px-4 py-3 text-gray-600 text-xs">{row.type}</td>
+                <td className="px-4 py-3 text-gray-600 text-xs">{row.owner}</td>
+                <td className="px-4 py-3 text-gray-600 text-xs">{row.date}</td>
+                <td className="px-4 py-3 text-gray-600 text-xs">{row.status}</td>
+                <td className="px-4 py-3 text-gray-600 text-xs">{row.version ?? '—'}</td>
+                <td className="px-4 py-3 text-gray-600 text-xs">{row.reviewedBy ?? '—'}</td>
+                <td className="px-4 py-3 text-xs">
+                  {row.link
+                    ? <a href={/^https?:\/\//i.test(row.link) ? row.link : `https://${row.link}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Open ↗</a>
+                    : '—'}
+                </td>
+                <td className="px-4 py-3">
+                  <RowActions onEdit={() => onEdit(idx)} onDelete={() => onDelete(idx)} />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }

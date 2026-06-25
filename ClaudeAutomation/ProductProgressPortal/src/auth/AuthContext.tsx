@@ -1,77 +1,114 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
-import type { GoogleUser } from '../types';
+import type { AppUser } from '../types';
 import { supabase } from '../lib/supabase';
 
+export const SUPER_ADMIN_EMAIL = 'tahera.bharmal@egovernments.org';
+
+export interface AdminRecord {
+  productSlugs: string[];
+  isSuperAdmin: boolean;
+}
+
 interface AuthContextValue {
-  user: GoogleUser | null;
+  user: AppUser | null;
   isLoading: boolean;
-  login: (user: GoogleUser) => void;
+  adminRecord: AdminRecord | null;
   loginWithPassword: (loginId: string, password: string) => Promise<void>;
   logout: () => void;
-  isAdmin: (adminEmails: string[]) => boolean;
+  isAdminFor: (productSlug: string) => boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<GoogleUser | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+async function fetchAdminRecord(email: string): Promise<AdminRecord> {
+  try {
+    const { data } = await supabase
+      .from('admin_users')
+      .select('product_slugs, is_super_admin')
+      .eq('email', email)
+      .maybeSingle();
+    if (data) {
+      return {
+        productSlugs: data.product_slugs ?? [],
+        isSuperAdmin: data.is_super_admin ?? false,
+      };
+    }
+  } catch {
+    // table may not exist yet during setup
+  }
+  // Fallback: super admin email always gets super admin access
+  return { productSlugs: [], isSuperAdmin: email === SUPER_ADMIN_EMAIL };
+}
 
-  // Restore persisted Supabase session on mount
+function makeAppUser(session: { user: { email?: string; user_metadata?: { username?: string }; }; access_token: string }): AppUser {
+  const email = session.user.email ?? '';
+  return {
+    email,
+    name: session.user.user_metadata?.username ?? email,
+    picture: '',
+    accessToken: session.access_token,
+  };
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [adminRecord, setAdminRecord] = useState<AdminRecord | null>(null);
+
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        setUser({
-          email: session.user.email ?? '',
-          name: session.user.user_metadata?.username ?? session.user.email ?? '',
-          picture: '',
-          accessToken: session.access_token,
-        });
+        const u = makeAppUser(session);
+        setUser(u);
+        setAdminRecord(await fetchAdminRecord(u.email));
       }
       setIsLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        setUser({
-          email: session.user.email ?? '',
-          name: session.user.user_metadata?.username ?? session.user.email ?? '',
-          picture: '',
-          accessToken: session.access_token,
-        });
+        const u = makeAppUser(session);
+        setUser(u);
+        setAdminRecord(await fetchAdminRecord(u.email));
       } else {
         setUser(null);
+        setAdminRecord(null);
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = useCallback((u: GoogleUser) => setUser(u), []);
-
   const loginWithPassword = useCallback(async (loginId: string, password: string) => {
     const email = loginId.includes('@') ? loginId : `${loginId}@egovernments.org`;
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw new Error(error.message);
-    // user state is set by onAuthStateChange listener above
+    // user + adminRecord set by onAuthStateChange
   }, []);
 
   const logout = useCallback(() => {
     supabase.auth.signOut();
     setUser(null);
+    setAdminRecord(null);
   }, []);
 
-  const isAdmin = useCallback(
-    (adminEmails: string[]) => {
-      if (!user) return false;
-      if (adminEmails.length === 0) return true;
-      return adminEmails.includes(user.email);
-    },
-    [user]
-  );
+  const isSuperAdmin =
+    user?.email === SUPER_ADMIN_EMAIL ||
+    (adminRecord?.isSuperAdmin ?? false);
+
+  const isAdminFor = useCallback((productSlug: string): boolean => {
+    if (!user) return false;
+    if (user.email === SUPER_ADMIN_EMAIL || adminRecord?.isSuperAdmin) return true;
+    return adminRecord?.productSlugs.includes(productSlug) ?? false;
+  }, [user, adminRecord]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, loginWithPassword, logout, isAdmin }}>
+    <AuthContext.Provider value={{
+      user, isLoading, adminRecord,
+      loginWithPassword, logout,
+      isAdminFor, isSuperAdmin,
+    }}>
       {children}
     </AuthContext.Provider>
   );

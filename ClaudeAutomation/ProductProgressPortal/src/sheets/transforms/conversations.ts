@@ -5,7 +5,7 @@ export function parseConversations(rows: string[][]): Conversation[] {
     organization: r[0] ?? '',
     owner: r[1] ?? '',
     objective: r[2] ?? '',
-    stage: (r[3] as Conversation['stage']) || 'Discovery',
+    stage: (r[3] as Conversation['stage']) || 'Discover',
     latestUpdate: r[4] ?? '',
     nextStep: r[5] ?? '',
   }));

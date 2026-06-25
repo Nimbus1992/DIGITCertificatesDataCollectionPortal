@@ -1,8 +1,12 @@
 import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { useStore } from '../../store/DataStore';
+import { VisibilityBanner } from '../VisibilityBanner';
 import { Modal } from '../../components/Modal';
-import { Field, Input, Select, Textarea } from '../../components/Field';
+import { Field, Input, Select, Textarea, ListEditor } from '../../components/Field';
 import { Empty, RowActions } from './OKREditor';
+import { ComplaintsRoadmapEditor } from './ComplaintsRoadmapEditor';
+import { StudioRoadmapEditor } from './StudioRoadmapEditor';
 import type { RoadmapItem, Status } from '../../types';
 
 const EMPTY: RoadmapItem = { item: '', description: '', status: 'Upcoming', confidence: 'Green', dependencies: '', deliveryWindow: '', quarter: '', phase: '' };
@@ -18,6 +22,10 @@ const STATUS_STYLE: Record<RoadmapItem['status'], string> = {
 };
 
 export function RoadmapEditor() {
+  const { productSlug } = useParams<{ productSlug: string }>();
+  if (productSlug === 'cms') return <ComplaintsRoadmapEditor />;
+  if (productSlug === 'studio') return <StudioRoadmapEditor />;
+
   const { data, set } = useStore();
   const [modal, setModal] = useState<{ open: boolean; idx: number | null }>({ open: false, idx: null });
   const [form, setForm] = useState<RoadmapItem>(EMPTY);
@@ -33,14 +41,62 @@ export function RoadmapEditor() {
   const upd = <K extends keyof RoadmapItem>(k: K, v: RoadmapItem[K]) => setForm(f => ({ ...f, [k]: v }));
 
   return (
-    <div className="p-8 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div><h2 className="text-2xl font-bold text-gray-900 mb-1">Roadmap Editor</h2><p className="text-gray-500 text-sm">{rows.length} items</p></div>
+    <>
+      <VisibilityBanner visKey="roadmap" label="Roadmap" />
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div><h2 className="text-xl md:text-2xl font-bold text-gray-900 mb-1">Roadmap Editor</h2><p className="text-gray-500 text-sm">{rows.length} items</p></div>
         <button onClick={openAdd} className="px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">+ Add Item</button>
       </div>
 
+      {/* Roadmap Comment / Context */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Roadmap Comment / Context</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Optional note shown above the roadmap in the executive view</p>
+        </div>
+        <div className="p-5">
+          <Field label="Comment">
+            <Textarea
+              value={data.roadmapComment ?? ''}
+              onChange={e => set('roadmapComment', e.target.value)}
+              rows={4}
+              placeholder="Add any context or notes for the executive view…"
+            />
+          </Field>
+        </div>
+      </div>
+
+      {/* Scope Overview — edits productOverview.inScope / outOfScope */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-5 py-3 border-b border-gray-100 bg-gray-50">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Scope Overview</h3>
+          <p className="text-xs text-gray-400 mt-0.5">Shown at the top of the Roadmap in the executive view.</p>
+        </div>
+        <div className="grid md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-gray-100 p-5 gap-5 md:gap-0">
+          <div className="md:pr-5">
+            <Field label="In Scope">
+              <ListEditor
+                values={data.productOverview?.inScope ?? []}
+                onChange={v => set('productOverview', { ...data.productOverview, inScope: v })}
+                placeholder="Add in-scope item"
+              />
+            </Field>
+          </div>
+          <div className="md:pl-5">
+            <Field label="Out of Scope">
+              <ListEditor
+                values={data.productOverview?.outOfScope ?? []}
+                onChange={v => set('productOverview', { ...data.productOverview, outOfScope: v })}
+                placeholder="Add out-of-scope item"
+              />
+            </Field>
+          </div>
+        </div>
+      </div>
+
       {rows.length === 0 ? <Empty label="roadmap items" onAdd={openAdd} /> : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>{['Item', 'Quarter', 'Phase', 'Delivery Window', 'Status', 'Confidence', ''].map(h => (
@@ -68,7 +124,7 @@ export function RoadmapEditor() {
         <Modal title={modal.idx === null ? 'Add Roadmap Item' : 'Edit Roadmap Item'} onClose={() => setModal({ open: false, idx: null })} onSave={handleSave} wide>
           <Field label="Item Name"><Input value={form.item} onChange={e => upd('item', e.target.value)} /></Field>
           <Field label="Description"><Textarea value={form.description} onChange={e => upd('description', e.target.value)} /></Field>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="Quarter (e.g. Q1 FY26)"><Input value={form.quarter} onChange={e => upd('quarter', e.target.value)} /></Field>
             <Field label="Phase"><Input value={form.phase} onChange={e => upd('phase', e.target.value)} /></Field>
             <Field label="Delivery Window"><Input value={form.deliveryWindow} onChange={e => upd('deliveryWindow', e.target.value)} placeholder="e.g. Apr–Jun 2025" /></Field>
@@ -87,5 +143,6 @@ export function RoadmapEditor() {
         </Modal>
       )}
     </div>
+    </>
   );
 }
