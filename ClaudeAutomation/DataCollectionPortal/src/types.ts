@@ -28,9 +28,21 @@ export interface DeploymentArea {
   zones: string[];
 }
 
+export interface BoundaryLevel {
+  id: string;
+  name: string;
+}
+
 export interface DeploymentConfig {
   availabilityScope: "entire_state" | "select_cities" | "select_districts";
   areas: DeploymentArea[];
+  // Boundary hierarchy
+  hierarchyName: string;
+  hierarchyLevels: BoundaryLevel[];
+  boundaryRows: Record<string, string>[];
+  uploadMethod: "shapefile" | "excel" | "";
+  shapefileName: string;
+  operatingLevel: number; // index into hierarchyLevels — level used in the application form
 }
 
 export interface TradeCategory {

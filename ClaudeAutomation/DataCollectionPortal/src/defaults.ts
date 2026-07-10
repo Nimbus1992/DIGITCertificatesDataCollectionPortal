@@ -27,6 +27,12 @@ export const DEFAULT_CONFIG: ImplementationConfig = {
   deployment: {
     availabilityScope: "select_cities",
     areas: [{ city: "", zones: [""] }],
+    hierarchyName: "",
+    hierarchyLevels: [],
+    boundaryRows: [],
+    uploadMethod: "",
+    shapefileName: "",
+    operatingLevel: 0,
   },
   overall: {
     renewalEnabled: true,

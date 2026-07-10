@@ -100,6 +100,13 @@ export default function App() {
         if (!parsed.formConfig.customSubsections) parsed.formConfig.customSubsections = [];
         if (!parsed.formConfig.customFields)      parsed.formConfig.customFields      = [];
         if (parsed.formConfig.declarationMobileOtpEnabled === undefined) parsed.formConfig.declarationMobileOtpEnabled = false;
+        // Migrate deployment to new boundary shape
+        if (parsed.deployment.hierarchyName === undefined)   parsed.deployment.hierarchyName   = "";
+        if (!parsed.deployment.hierarchyLevels)              parsed.deployment.hierarchyLevels = [];
+        if (!parsed.deployment.boundaryRows)                 parsed.deployment.boundaryRows    = [];
+        if (parsed.deployment.uploadMethod === undefined)    parsed.deployment.uploadMethod    = "";
+        if (parsed.deployment.shapefileName === undefined)   parsed.deployment.shapefileName   = "";
+        if (parsed.deployment.operatingLevel === undefined)  parsed.deployment.operatingLevel  = 0;
         // Migrate fees to new shape
         if (!parsed.fees.inspectionFeeMode)   { parsed.fees.inspectionFeeMode = "slab"; parsed.fees.inspectionFeeFlat = 500; parsed.fees.inspectionSlabDimension = "Business Area (sq ft)"; }
         if (!parsed.fees.licenseFeeMode)      { parsed.fees.licenseFeeMode = "slab"; parsed.fees.licenseFeeFlat = 1000; parsed.fees.licenseFeeSlabs = DEFAULT_CONFIG.fees.licenseFeeSlabs; parsed.fees.licenseSlabDimension = "Business Area (sq ft)"; }
@@ -164,6 +171,12 @@ export default function App() {
     if (loaded.formConfig.declarationMobileOtpEnabled === undefined) loaded.formConfig.declarationMobileOtpEnabled = false;
     if (!loaded.formConfig.deletedRecommendedFields) loaded.formConfig.deletedRecommendedFields = [];
     if (!loaded.formConfig.editedRecommendedFields)  loaded.formConfig.editedRecommendedFields  = {};
+    if (loaded.deployment.hierarchyName === undefined)   loaded.deployment.hierarchyName   = "";
+    if (!loaded.deployment.hierarchyLevels)              loaded.deployment.hierarchyLevels = [];
+    if (!loaded.deployment.boundaryRows)                 loaded.deployment.boundaryRows    = [];
+    if (loaded.deployment.uploadMethod === undefined)    loaded.deployment.uploadMethod    = "";
+    if (loaded.deployment.shapefileName === undefined)   loaded.deployment.shapefileName   = "";
+    if (loaded.deployment.operatingLevel === undefined)  loaded.deployment.operatingLevel  = 0;
     if (!loaded.fees.inspectionFeeMode)   { loaded.fees.inspectionFeeMode = "slab"; loaded.fees.inspectionFeeFlat = 500; loaded.fees.inspectionSlabDimension = "Business Area (sq ft)"; }
     if (!loaded.fees.licenseFeeMode)      { loaded.fees.licenseFeeMode = "slab"; loaded.fees.licenseFeeFlat = 1000; loaded.fees.licenseFeeSlabs = DEFAULT_CONFIG.fees.licenseFeeSlabs; loaded.fees.licenseSlabDimension = "Business Area (sq ft)"; }
     if (!loaded.workflow.stages)         loaded.workflow.stages       = DEFAULT_CONFIG.workflow.stages;
@@ -198,6 +211,12 @@ export default function App() {
     if (loaded.formConfig.declarationMobileOtpEnabled === undefined) loaded.formConfig.declarationMobileOtpEnabled = false;
     if (!loaded.formConfig.deletedRecommendedFields) loaded.formConfig.deletedRecommendedFields = [];
     if (!loaded.formConfig.editedRecommendedFields)  loaded.formConfig.editedRecommendedFields  = {};
+    if (loaded.deployment.hierarchyName === undefined)   loaded.deployment.hierarchyName   = "";
+    if (!loaded.deployment.hierarchyLevels)              loaded.deployment.hierarchyLevels = [];
+    if (!loaded.deployment.boundaryRows)                 loaded.deployment.boundaryRows    = [];
+    if (loaded.deployment.uploadMethod === undefined)    loaded.deployment.uploadMethod    = "";
+    if (loaded.deployment.shapefileName === undefined)   loaded.deployment.shapefileName   = "";
+    if (loaded.deployment.operatingLevel === undefined)  loaded.deployment.operatingLevel  = 0;
     if (!loaded.fees.inspectionFeeMode)   { loaded.fees.inspectionFeeMode = "slab"; loaded.fees.inspectionFeeFlat = 500; loaded.fees.inspectionSlabDimension = "Business Area (sq ft)"; }
     if (!loaded.fees.licenseFeeMode)      { loaded.fees.licenseFeeMode = "slab"; loaded.fees.licenseFeeFlat = 1000; loaded.fees.licenseFeeSlabs = DEFAULT_CONFIG.fees.licenseFeeSlabs; loaded.fees.licenseSlabDimension = "Business Area (sq ft)"; }
     if (!loaded.workflow.stages)         loaded.workflow.stages       = DEFAULT_CONFIG.workflow.stages;
