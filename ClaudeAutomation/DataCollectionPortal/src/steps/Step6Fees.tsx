@@ -24,12 +24,35 @@ interface AvailableFeeField {
   fieldType: "text" | "number" | "date" | "dropdown" | string;
 }
 
-// Standard fields always available for fee calculation (no "recommended" badge — all fields are equal)
+// All recommended application form fields — mirrors RECOMMENDED_SECTIONS in Step4FormConfig
 const STANDARD_FEE_FIELDS: AvailableFeeField[] = [
-  { id: "rec__business_area",    name: "Business Area",        fieldType: "number"   },
-  { id: "rec__num_employees",    name: "Number of Employees",  fieldType: "number"   },
-  { id: "rec__annual_turnover",  name: "Annual Turnover",      fieldType: "number"   },
-  { id: "rec__business_type",    name: "Business Type",        fieldType: "dropdown" },
+  // Applicant Details
+  { id: "rec__full_name",          name: "Full Name",                      fieldType: "text"     },
+  { id: "rec__mobile_number",      name: "Mobile Number",                  fieldType: "phone"    },
+  { id: "rec__email_address",      name: "Email Address",                  fieldType: "email"    },
+  { id: "rec__id_type",            name: "ID Type",                        fieldType: "dropdown" },
+  { id: "rec__id_number",          name: "ID Number",                      fieldType: "text"     },
+  { id: "rec__apt_house_no",       name: "House No / Apartment Name",      fieldType: "text"     },
+  { id: "rec__address_line1",      name: "Address Line 1",                 fieldType: "text"     },
+  { id: "rec__address_line2",      name: "Address Line 2",                 fieldType: "text"     },
+  { id: "rec__postal_code",        name: "Postal Code",                    fieldType: "text"     },
+  // Business Details — General
+  { id: "rec__business_name",      name: "Business / Trade Name",          fieldType: "text"     },
+  { id: "rec__trade_category",     name: "Trade Category",                 fieldType: "dropdown" },
+  { id: "rec__sub_category",       name: "Sub-category",                   fieldType: "dropdown" },
+  { id: "rec__reg_number",         name: "Business Registration Number",   fieldType: "text"     },
+  { id: "rec__tin",                name: "Tax Identification Number",      fieldType: "text"     },
+  { id: "rec__year_established",   name: "Year of Establishment",          fieldType: "year"     },
+  // Business Details — Business Address
+  { id: "rec__biz_house_no",       name: "Business House No / Apt",        fieldType: "text"     },
+  { id: "rec__biz_address_line1",  name: "Business Address Line 1",        fieldType: "text"     },
+  { id: "rec__biz_address_line2",  name: "Business Address Line 2",        fieldType: "text"     },
+  { id: "rec__biz_postal_code",    name: "Business Postal Code",           fieldType: "text"     },
+  // Business Details — Operations
+  { id: "rec__business_area",      name: "Business Area",                  fieldType: "number"   },
+  { id: "rec__num_employees",      name: "Number of Employees",            fieldType: "number"   },
+  { id: "rec__operating_hours",    name: "Operating Hours",                fieldType: "text"     },
+  { id: "rec__is_hazardous",       name: "Is Business Hazardous?",         fieldType: "dropdown" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
