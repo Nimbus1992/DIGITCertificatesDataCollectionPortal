@@ -207,7 +207,7 @@ export interface CategoryEntry {
 export interface OverallConfig {
   renewalEnabled: boolean;
   renewalReuseIssuanceForm: true;
-  renewalApprovalMode: "auto_if_unchanged" | "always_workflow";
+  renewalApprovalMode: "auto_all" | "auto_if_unchanged" | "always_workflow";
   renewalTriggerDays: number;
   renewalGracePeriodDays: number;
   categoryLevels: number;
