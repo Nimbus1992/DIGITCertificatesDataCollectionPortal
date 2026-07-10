@@ -146,10 +146,10 @@ export const DEFAULT_CONFIG: ImplementationConfig = {
     declarationMobileOtpEnabled: false,
   },
   roles: [
-    { id: "citizen",           name: "Citizen",            description: "Applicant applying for a Business License",             staffEmails: [] },
-    { id: "document_verifier", name: "Document Verifier",  description: "Reviews submitted applications and verifies documents",  staffEmails: [] },
-    { id: "field_inspector",   name: "Field Inspector",    description: "Visits the business site and confirms compliance",       staffEmails: [] },
-    { id: "approver",          name: "Approver",           description: "Final approving authority for licence issuance",         staffEmails: [] },
+    { id: "citizen",           name: "Citizen",            description: "Applicant applying for a Business License",             staffEmails: [], staffMembers: [] },
+    { id: "document_verifier", name: "Document Verifier",  description: "Reviews submitted applications and verifies documents",  staffEmails: [], staffMembers: [] },
+    { id: "field_inspector",   name: "Field Inspector",    description: "Visits the business site and confirms compliance",       staffEmails: [], staffMembers: [] },
+    { id: "approver",          name: "Approver",           description: "Final approving authority for licence issuance",         staffEmails: [], staffMembers: [] },
   ],
   fees: {
     currency: "INR",
@@ -179,6 +179,14 @@ export const DEFAULT_CONFIG: ImplementationConfig = {
     customFeeFields: [],
     customFeeSlabs: {},
     customFeeTable: [],
+    additionalFeeComponents: [],
+    // Renewal fee (Issue #5 extension)
+    renewalFeeMode: "flat",
+    renewalFlatFeeAmount: 0,
+    renewalCustomFeeFields: [],
+    renewalCustomFeeSlabs: {},
+    renewalCustomFeeTable: [],
+    renewalAdditionalFeeComponents: [],
   },
   workflow: {
     approvalLevels: 2,
@@ -301,6 +309,8 @@ export const DEFAULT_CONFIG: ImplementationConfig = {
       { id: "cl4", stageId: "pending_inspection", label: "Site photos uploaded",                fieldType: "file",     required: true  },
       { id: "cl5", stageId: "pending_inspection", label: "Inspection remarks",                  fieldType: "text",     required: false },
     ],
+    renewalStages: [],
+    renewalChecklistItems: [],
   },
   notes: "",
   paymentsNotifications: {

@@ -259,7 +259,7 @@ export default function AdminDashboard({ onLogout, onOpenAccount }: Props) {
                       </div>
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-slate-500">Progress</span>
-                        <span className="text-slate-700 font-medium">Step {account.current_step} / 8</span>
+                        <span className="text-slate-700 font-medium">{Math.round((account.current_step / 13) * 100)}%</span>
                       </div>
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-slate-500">Verified</span>

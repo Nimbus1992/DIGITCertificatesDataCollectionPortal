@@ -47,7 +47,7 @@ export function isStepComplete(stepId: number, config: ImplementationConfig): bo
     case 11:
       return config.roles
         .filter((r) => r.id !== "citizen")
-        .some((r) => r.staffEmails.length > 0);
+        .some((r) => (r.staffMembers?.length ?? 0) > 0 || r.staffEmails.length > 0);
 
     // ── Others ───────────────────────────────────────────────────────────────
     case 12:

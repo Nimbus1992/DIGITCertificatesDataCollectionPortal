@@ -90,11 +90,19 @@ export interface FormConfig {
 
 // ── Roles ────────────────────────────────────────────────────────────────────
 
+export interface StaffMember {
+  id: string;
+  name: string;
+  mobile: string;
+  email: string;
+}
+
 export interface StaffRole {
   id: string;
   name: string;
   description: string;
-  staffEmails: string[];
+  staffEmails: string[];        // kept for backward compatibility
+  staffMembers?: StaffMember[]; // per-role user list (Name, Mobile, Email)
 }
 
 // ── Fees ─────────────────────────────────────────────────────────────────────
@@ -143,6 +151,23 @@ export interface FeesConfig {
   customFeeFields: string[];   // field IDs (or names for recommended fields) selected by the user
   customFeeSlabs: Record<string, CustomFeeSlabEntry[]>;  // keyed by field id/name
   customFeeTable: Array<Record<string, number | string>>; // generated fee matrix rows
+  // Additional fee components (taxes, surcharges, etc.) for application fee
+  additionalFeeComponents: AdditionalFeeComponent[];
+
+  // ── Renewal fee (Issue #5 extension) ────────────────────────────────────────
+  renewalFeeMode: FeesTopLevelMode;
+  renewalFlatFeeAmount: number;
+  renewalCustomFeeFields: string[];
+  renewalCustomFeeSlabs: Record<string, CustomFeeSlabEntry[]>;
+  renewalCustomFeeTable: Array<Record<string, number | string>>;
+  renewalAdditionalFeeComponents: AdditionalFeeComponent[];
+}
+
+export interface AdditionalFeeComponent {
+  id: string;
+  label: string;
+  type: "flat" | "percentage";
+  value: number;
 }
 
 // ── Payments & Notifications ─────────────────────────────────────────────────
@@ -254,6 +279,8 @@ export interface WorkflowConfig {
   allowCitizenWithdrawal: boolean;
   stages: WorkflowStage[];
   checklistItems: WorkflowChecklistItem[];
+  renewalStages?: WorkflowStage[];
+  renewalChecklistItems?: WorkflowChecklistItem[];
 }
 
 // ── Top-level ─────────────────────────────────────────────────────────────────

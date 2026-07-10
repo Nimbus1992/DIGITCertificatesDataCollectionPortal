@@ -4,6 +4,7 @@ import type {
   FeesConfig,
   FeesTopLevelMode,
   CustomFeeSlabEntry,
+  AdditionalFeeComponent,
 } from "../types";
 import { StepWrapper } from "./StepWrapper";
 import {
@@ -74,6 +75,10 @@ function supportsSlab(fieldType: string): boolean {
   return fieldType === "number" || fieldType === "text";
 }
 
+function genId(): string {
+  return Math.random().toString(36).slice(2, 10);
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -87,6 +92,7 @@ interface Props {
 // ── Sub-step types ────────────────────────────────────────────────────────────
 
 type CustomSubStep = "field-select" | "slab-config" | "fee-table" | "confirm";
+type FeeTab = "application" | "renewal";
 
 // ── Main Component ────────────────────────────────────────────────────────────
 
@@ -105,18 +111,23 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
     set({ currency: accountCurrency, currencySymbol: accountSymbol });
   }
 
-  // Custom logic wizard sub-step state (local — not persisted; resets on navigation)
-  const [customSubStep, setCustomSubStep] = useState<CustomSubStep>("field-select");
-  // Per-field slab toggle (whether user chose "Yes" to create slabs for that field)
-  const [slabEnabled, setSlabEnabled] = useState<Record<string, boolean>>({});
+  const renewalEnabled = config.overall.renewalEnabled === true;
+
+  // Active tab
+  const [activeTab, setActiveTab] = useState<FeeTab>("application");
+
+  // Custom logic wizard sub-step state — separate for application and renewal
+  const [appCustomSubStep, setAppCustomSubStep] = useState<CustomSubStep>("field-select");
+  const [renewalCustomSubStep, setRenewalCustomSubStep] = useState<CustomSubStep>("field-select");
+  // Per-field slab toggle — separate for application and renewal
+  const [appSlabEnabled, setAppSlabEnabled] = useState<Record<string, boolean>>({});
+  const [renewalSlabEnabled, setRenewalSlabEnabled] = useState<Record<string, boolean>>({});
 
   // ── Build the combined list of available fields ─────────────────────────────
 
   const availableFields = useMemo((): AvailableFeeField[] => {
-    // Start with the standard fields
     const seen = new Set<string>(STANDARD_FEE_FIELDS.map((f) => f.id));
     const list: AvailableFeeField[] = [...STANDARD_FEE_FIELDS];
-    // Merge all custom fields from the form config, deduplicated by id
     for (const cf of config.formConfig.customFields) {
       if (!seen.has(cf.id)) {
         seen.add(cf.id);
@@ -126,9 +137,9 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
     return list;
   }, [config.formConfig.customFields]);
 
-  // ── Handlers ────────────────────────────────────────────────────────────────
+  // ── Application fee handlers ─────────────────────────────────────────────────
 
-  function toggleFieldSelection(fieldId: string) {
+  function toggleAppFieldSelection(fieldId: string) {
     const current = f.customFeeFields;
     if (current.includes(fieldId)) {
       set({ customFeeFields: current.filter((id) => id !== fieldId) });
@@ -137,101 +148,123 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
     }
   }
 
-  function setSlabEntries(fieldId: string, slabs: CustomFeeSlabEntry[]) {
+  function setAppSlabEntries(fieldId: string, slabs: CustomFeeSlabEntry[]) {
     set({ customFeeSlabs: { ...f.customFeeSlabs, [fieldId]: slabs } });
   }
 
-  function addSlabEntry(fieldId: string) {
+  function addAppSlabEntry(fieldId: string) {
     const current = f.customFeeSlabs[fieldId] ?? [];
-    setSlabEntries(fieldId, [...current, { label: "", lowerBound: 0, upperBound: 0 }]);
+    setAppSlabEntries(fieldId, [...current, { label: "", lowerBound: 0, upperBound: 0 }]);
   }
 
-  function updateSlabEntry(fieldId: string, idx: number, patch: Partial<CustomFeeSlabEntry>) {
+  function updateAppSlabEntry(fieldId: string, idx: number, patch: Partial<CustomFeeSlabEntry>) {
     const current = f.customFeeSlabs[fieldId] ?? [];
-    setSlabEntries(fieldId, current.map((s, i) => i === idx ? { ...s, ...patch } : s));
+    setAppSlabEntries(fieldId, current.map((s, i) => i === idx ? { ...s, ...patch } : s));
   }
 
-  function removeSlabEntry(fieldId: string, idx: number) {
+  function removeAppSlabEntry(fieldId: string, idx: number) {
     const current = f.customFeeSlabs[fieldId] ?? [];
-    setSlabEntries(fieldId, current.filter((_, i) => i !== idx));
+    setAppSlabEntries(fieldId, current.filter((_, i) => i !== idx));
   }
 
-  // ── Generate fee table rows from selected fields ─────────────────────────────
-
-  function generateFeeTable() {
-    // Build dimension arrays for each selected field
-    const dims: Array<{ fieldId: string; values: string[] }> = [];
-
-    for (const fieldId of f.customFeeFields) {
-      const field = availableFields.find((af) => af.id === fieldId);
-      if (!field) continue;
-
-      if (supportsSlab(field.fieldType) && slabEnabled[fieldId]) {
-        const slabs = f.customFeeSlabs[fieldId] ?? [];
-        const values = slabs.map((s, i) => s.label || `${s.lowerBound}–${s.upperBound}` || `Slab ${i + 1}`);
-        if (values.length > 0) dims.push({ fieldId, values });
-      } else if (field.fieldType === "dropdown") {
-        // Use dropdown options if available (custom field), else use placeholder rows
-        const cf = config.formConfig.customFields.find((x) => x.id === fieldId);
-        const opts = cf?.dropdownOptions ?? [];
-        if (opts.length > 0) {
-          dims.push({ fieldId, values: opts });
-        } else {
-          dims.push({ fieldId, values: [`${field.name} Option 1`, `${field.name} Option 2`] });
-        }
-      } else {
-        // Non-slab numeric or text: create a single "Default" row
-        dims.push({ fieldId, values: [field.name] });
-      }
-    }
-
-    if (dims.length === 0) return;
-
-    // Cartesian product of all dimension values
-    let rows: Array<Record<string, string | number>> = [{}];
-    for (const dim of dims) {
-      const expanded: Array<Record<string, string | number>> = [];
-      for (const row of rows) {
-        for (const val of dim.values) {
-          expanded.push({ ...row, [dim.fieldId]: val });
-        }
-      }
-      rows = expanded;
-    }
-
-    // Preserve existing fee amounts where the row key combination matches
-    const existingMap = new Map<string, number>();
-    for (const row of f.customFeeTable) {
-      const key = Object.entries(row)
-        .filter(([k]) => k !== "__fee")
-        .map(([k, v]) => `${k}=${v}`)
-        .sort()
-        .join("|");
-      existingMap.set(key, Number(row.__fee ?? 0));
-    }
-
-    const newRows = rows.map((row) => {
-      const key = Object.entries(row)
-        .map(([k, v]) => `${k}=${v}`)
-        .sort()
-        .join("|");
-      return { ...row, __fee: existingMap.get(key) ?? 0 };
-    });
-
-    set({ customFeeTable: newRows });
-    setCustomSubStep("fee-table");
+  function generateAppFeeTable() {
+    const table = buildFeeTable(f.customFeeFields, f.customFeeSlabs, appSlabEnabled, availableFields, config, f.customFeeTable);
+    if (!table) return;
+    set({ customFeeTable: table });
+    setAppCustomSubStep("fee-table");
   }
 
-  function updateTableRowFee(rowIdx: number, amount: number) {
+  function updateAppTableRowFee(rowIdx: number, amount: number) {
     const newTable = f.customFeeTable.map((row, i) =>
       i === rowIdx ? { ...row, __fee: amount } : row
     );
     set({ customFeeTable: newTable });
   }
 
-  // ── Mode selector ────────────────────────────────────────────────────────────
+  // ── Renewal fee handlers ──────────────────────────────────────────────────────
 
-  const selectedFields = availableFields.filter((af) => f.customFeeFields.includes(af.id));
+  function toggleRenewalFieldSelection(fieldId: string) {
+    const current = f.renewalCustomFeeFields ?? [];
+    if (current.includes(fieldId)) {
+      set({ renewalCustomFeeFields: current.filter((id) => id !== fieldId) });
+    } else {
+      set({ renewalCustomFeeFields: [...current, fieldId] });
+    }
+  }
+
+  function setRenewalSlabEntries(fieldId: string, slabs: CustomFeeSlabEntry[]) {
+    set({ renewalCustomFeeSlabs: { ...(f.renewalCustomFeeSlabs ?? {}), [fieldId]: slabs } });
+  }
+
+  function addRenewalSlabEntry(fieldId: string) {
+    const current = (f.renewalCustomFeeSlabs ?? {})[fieldId] ?? [];
+    setRenewalSlabEntries(fieldId, [...current, { label: "", lowerBound: 0, upperBound: 0 }]);
+  }
+
+  function updateRenewalSlabEntry(fieldId: string, idx: number, patch: Partial<CustomFeeSlabEntry>) {
+    const current = (f.renewalCustomFeeSlabs ?? {})[fieldId] ?? [];
+    setRenewalSlabEntries(fieldId, current.map((s, i) => i === idx ? { ...s, ...patch } : s));
+  }
+
+  function removeRenewalSlabEntry(fieldId: string, idx: number) {
+    const current = (f.renewalCustomFeeSlabs ?? {})[fieldId] ?? [];
+    setRenewalSlabEntries(fieldId, current.filter((_, i) => i !== idx));
+  }
+
+  function generateRenewalFeeTable() {
+    const table = buildFeeTable(
+      f.renewalCustomFeeFields ?? [],
+      f.renewalCustomFeeSlabs ?? {},
+      renewalSlabEnabled,
+      availableFields,
+      config,
+      f.renewalCustomFeeTable ?? [],
+    );
+    if (!table) return;
+    set({ renewalCustomFeeTable: table });
+    setRenewalCustomSubStep("fee-table");
+  }
+
+  function updateRenewalTableRowFee(rowIdx: number, amount: number) {
+    const newTable = (f.renewalCustomFeeTable ?? []).map((row, i) =>
+      i === rowIdx ? { ...row, __fee: amount } : row
+    );
+    set({ renewalCustomFeeTable: newTable });
+  }
+
+  // ── Additional fee component handlers ────────────────────────────────────────
+
+  function addAdditionalComponent(isRenewal: boolean) {
+    const newComp: AdditionalFeeComponent = { id: genId(), label: "", type: "flat", value: 0 };
+    if (isRenewal) {
+      set({ renewalAdditionalFeeComponents: [...(f.renewalAdditionalFeeComponents ?? []), newComp] });
+    } else {
+      set({ additionalFeeComponents: [...(f.additionalFeeComponents ?? []), newComp] });
+    }
+  }
+
+  function updateAdditionalComponent(isRenewal: boolean, id: string, patch: Partial<AdditionalFeeComponent>) {
+    if (isRenewal) {
+      set({ renewalAdditionalFeeComponents: (f.renewalAdditionalFeeComponents ?? []).map((c) => c.id === id ? { ...c, ...patch } : c) });
+    } else {
+      set({ additionalFeeComponents: (f.additionalFeeComponents ?? []).map((c) => c.id === id ? { ...c, ...patch } : c) });
+    }
+  }
+
+  function removeAdditionalComponent(isRenewal: boolean, id: string) {
+    if (isRenewal) {
+      set({ renewalAdditionalFeeComponents: (f.renewalAdditionalFeeComponents ?? []).filter((c) => c.id !== id) });
+    } else {
+      set({ additionalFeeComponents: (f.additionalFeeComponents ?? []).filter((c) => c.id !== id) });
+    }
+  }
+
+  // ── Derived field lists ────────────────────────────────────────────────────
+
+  const appSelectedFields = availableFields.filter((af) => f.customFeeFields.includes(af.id));
+  const renewalSelectedFields = availableFields.filter((af) => (f.renewalCustomFeeFields ?? []).includes(af.id));
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <StepWrapper
@@ -260,116 +293,343 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
           </div>
         )}
 
-        {/* Mode selector */}
-        <div className="space-y-3">
-          <p className="text-sm font-semibold text-slate-800">How should the fee be calculated?</p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <ModeCard
-              active={f.feeMode === "flat"}
-              title="Flat Fee"
-              description="One fee for all applications regardless of details"
-              onClick={() => set({ feeMode: "flat" as FeesTopLevelMode })}
-            />
-            <ModeCard
-              active={f.feeMode === "custom"}
-              title="Custom Logic"
-              description="Fee calculated based on application fields — define slabs and a fee matrix"
-              onClick={() => { set({ feeMode: "custom" as FeesTopLevelMode }); setCustomSubStep("field-select"); }}
-            />
-          </div>
+        {/* Tab switcher */}
+        <div className="flex gap-0 border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+          <button
+            onClick={() => setActiveTab("application")}
+            className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === "application"
+                ? "bg-white text-blue-700 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Application Fee
+          </button>
+          <button
+            onClick={() => setActiveTab("renewal")}
+            className={`flex-1 px-4 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === "renewal"
+                ? "bg-white text-blue-700 shadow-sm"
+                : "text-slate-500 hover:text-slate-700"
+            }`}
+          >
+            Renewal Fee
+            {!renewalEnabled && (
+              <span className="ml-2 text-xs text-slate-400 font-normal">(not enabled)</span>
+            )}
+          </button>
         </div>
 
-        {/* ── Flat Fee ── */}
-        {f.feeMode === "flat" && (
-          <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-            <div>
-              <p className="text-sm font-semibold text-slate-800">Total Fee Amount</p>
-              <p className="text-xs text-slate-500 mt-0.5">Single fee charged to all applicants upon submission</p>
+        {/* ── Application Fee Tab ── */}
+        {activeTab === "application" && (
+          <div className="space-y-5">
+            {/* Mode selector */}
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-slate-800">How should the application fee be calculated?</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <ModeCard
+                  active={f.feeMode === "flat"}
+                  title="Flat Fee"
+                  description="One fee for all applications regardless of details"
+                  onClick={() => set({ feeMode: "flat" as FeesTopLevelMode })}
+                />
+                <ModeCard
+                  active={f.feeMode === "custom"}
+                  title="Custom Logic"
+                  description="Fee calculated based on application fields — define slabs and a fee matrix"
+                  onClick={() => { set({ feeMode: "custom" as FeesTopLevelMode }); setAppCustomSubStep("field-select"); }}
+                />
+              </div>
             </div>
-            <div className="relative max-w-xs">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">{sym}</span>
-              <input
-                type="number"
-                min={0}
-                className={`${inputCls} pl-8 w-full`}
-                value={f.flatFeeAmount || ""}
-                placeholder="0"
-                onChange={(e) => set({ flatFeeAmount: Number(e.target.value) })}
-              />
-            </div>
-            {f.flatFeeAmount > 0 && (
-              <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                <CheckCircle2 size={13} />
-                <span>Fee set to <strong>{sym}{f.flatFeeAmount.toLocaleString()}</strong> — applies to every application.</span>
+
+            {/* Flat Fee */}
+            {f.feeMode === "flat" && (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">Total Fee Amount</p>
+                  <p className="text-xs text-slate-500 mt-0.5">Single fee charged to all applicants upon submission</p>
+                </div>
+                <div className="relative max-w-xs">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">{sym}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className={`${inputCls} pl-8 w-full`}
+                    value={f.flatFeeAmount || ""}
+                    placeholder="0"
+                    onChange={(e) => set({ flatFeeAmount: Number(e.target.value) })}
+                  />
+                </div>
+                {f.flatFeeAmount > 0 && (
+                  <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                    <CheckCircle2 size={13} />
+                    <span>Fee set to <strong>{sym}{f.flatFeeAmount.toLocaleString()}</strong> — applies to every application.</span>
+                  </div>
+                )}
+
+                {/* Additional Fee Components */}
+                <AdditionalFeeComponents
+                  components={f.additionalFeeComponents ?? []}
+                  sym={sym}
+                  baseFeeLabel="application fee"
+                  onAdd={() => addAdditionalComponent(false)}
+                  onUpdate={(id, patch) => updateAdditionalComponent(false, id, patch)}
+                  onRemove={(id) => removeAdditionalComponent(false, id)}
+                />
+              </div>
+            )}
+
+            {/* Custom Logic Wizard */}
+            {f.feeMode === "custom" && (
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                <div className="bg-slate-50 border-b border-slate-200 px-5 py-3">
+                  <WizardProgress currentSubStep={appCustomSubStep} />
+                </div>
+                <div className="p-5">
+                  {appCustomSubStep === "field-select" && (
+                    <FieldSelectionStep
+                      availableFields={availableFields}
+                      selectedFieldIds={f.customFeeFields}
+                      onToggleField={toggleAppFieldSelection}
+                      onNext={() => { if (f.customFeeFields.length > 0) setAppCustomSubStep("slab-config"); }}
+                    />
+                  )}
+                  {appCustomSubStep === "slab-config" && (
+                    <SlabConfigStep
+                      selectedFields={appSelectedFields}
+                      slabEnabled={appSlabEnabled}
+                      slabs={f.customFeeSlabs}
+                      onToggleSlabEnabled={(id, val) => setAppSlabEnabled({ ...appSlabEnabled, [id]: val })}
+                      onAddSlab={addAppSlabEntry}
+                      onUpdateSlab={updateAppSlabEntry}
+                      onRemoveSlab={removeAppSlabEntry}
+                      onBack={() => setAppCustomSubStep("field-select")}
+                      onNext={generateAppFeeTable}
+                    />
+                  )}
+                  {appCustomSubStep === "fee-table" && (
+                    <FeeTableStep
+                      tableRows={f.customFeeTable}
+                      selectedFields={appSelectedFields}
+                      sym={sym}
+                      onUpdateRowFee={updateAppTableRowFee}
+                      onBack={() => setAppCustomSubStep("slab-config")}
+                      onNext={() => setAppCustomSubStep("confirm")}
+                    />
+                  )}
+                  {appCustomSubStep === "confirm" && (
+                    <ConfirmStep
+                      tableRows={f.customFeeTable}
+                      selectedFields={appSelectedFields}
+                      sym={sym}
+                      onBack={() => setAppCustomSubStep("fee-table")}
+                      additionalComponents={f.additionalFeeComponents ?? []}
+                      onAddComponent={() => addAdditionalComponent(false)}
+                      onUpdateComponent={(id, patch) => updateAdditionalComponent(false, id, patch)}
+                      onRemoveComponent={(id) => removeAdditionalComponent(false, id)}
+                    />
+                  )}
+                </div>
               </div>
             )}
           </div>
         )}
 
-        {/* ── Custom Logic Wizard ── */}
-        {f.feeMode === "custom" && (
-          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-            {/* Wizard progress header */}
-            <div className="bg-slate-50 border-b border-slate-200 px-5 py-3">
-              <WizardProgress currentSubStep={customSubStep} />
-            </div>
+        {/* ── Renewal Fee Tab ── */}
+        {activeTab === "renewal" && (
+          <div className="space-y-5">
+            {!renewalEnabled ? (
+              <div className="flex items-start gap-3 bg-slate-100 border border-slate-200 rounded-xl px-4 py-4">
+                <Info size={16} className="text-slate-400 shrink-0 mt-0.5" />
+                <p className="text-sm text-slate-500">
+                  Renewal fee is not configured. Enable <strong>Renewal</strong> in{" "}
+                  <span className="font-semibold">Overall Configuration</span> first.
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* Mode selector */}
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold text-slate-800">How should the renewal fee be calculated?</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <ModeCard
+                      active={(f.renewalFeeMode ?? "flat") === "flat"}
+                      title="Flat Fee"
+                      description="One fee for all renewals regardless of details"
+                      onClick={() => set({ renewalFeeMode: "flat" as FeesTopLevelMode })}
+                    />
+                    <ModeCard
+                      active={(f.renewalFeeMode ?? "flat") === "custom"}
+                      title="Custom Logic"
+                      description="Fee calculated based on application fields — define slabs and a fee matrix"
+                      onClick={() => { set({ renewalFeeMode: "custom" as FeesTopLevelMode }); setRenewalCustomSubStep("field-select"); }}
+                    />
+                  </div>
+                </div>
 
-            <div className="p-5">
-              {/* Step A — Field Selection */}
-              {customSubStep === "field-select" && (
-                <FieldSelectionStep
-                  availableFields={availableFields}
-                  selectedFieldIds={f.customFeeFields}
-                  onToggleField={toggleFieldSelection}
-                  onNext={() => {
-                    if (f.customFeeFields.length > 0) setCustomSubStep("slab-config");
-                  }}
-                />
-              )}
+                {/* Flat Renewal Fee */}
+                {(f.renewalFeeMode ?? "flat") === "flat" && (
+                  <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Total Renewal Fee Amount</p>
+                      <p className="text-xs text-slate-500 mt-0.5">Single fee charged to all applicants upon renewal submission</p>
+                    </div>
+                    <div className="relative max-w-xs">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">{sym}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        className={`${inputCls} pl-8 w-full`}
+                        value={f.renewalFlatFeeAmount ?? ""}
+                        placeholder="0"
+                        onChange={(e) => set({ renewalFlatFeeAmount: Number(e.target.value) })}
+                      />
+                    </div>
+                    {(f.renewalFlatFeeAmount ?? 0) > 0 && (
+                      <div className="flex items-center gap-2 text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                        <CheckCircle2 size={13} />
+                        <span>Fee set to <strong>{sym}{(f.renewalFlatFeeAmount ?? 0).toLocaleString()}</strong> — applies to every renewal.</span>
+                      </div>
+                    )}
 
-              {/* Step B — Slab Configuration */}
-              {customSubStep === "slab-config" && (
-                <SlabConfigStep
-                  selectedFields={selectedFields}
-                  slabEnabled={slabEnabled}
-                  slabs={f.customFeeSlabs}
-                  onToggleSlabEnabled={(id, val) => setSlabEnabled({ ...slabEnabled, [id]: val })}
-                  onAddSlab={addSlabEntry}
-                  onUpdateSlab={updateSlabEntry}
-                  onRemoveSlab={removeSlabEntry}
-                  onBack={() => setCustomSubStep("field-select")}
-                  onNext={generateFeeTable}
-                />
-              )}
+                    {/* Additional Fee Components */}
+                    <AdditionalFeeComponents
+                      components={f.renewalAdditionalFeeComponents ?? []}
+                      sym={sym}
+                      baseFeeLabel="renewal fee"
+                      onAdd={() => addAdditionalComponent(true)}
+                      onUpdate={(id, patch) => updateAdditionalComponent(true, id, patch)}
+                      onRemove={(id) => removeAdditionalComponent(true, id)}
+                    />
+                  </div>
+                )}
 
-              {/* Step C — Fee Table */}
-              {customSubStep === "fee-table" && (
-                <FeeTableStep
-                  tableRows={f.customFeeTable}
-                  selectedFields={selectedFields}
-                  sym={sym}
-                  onUpdateRowFee={updateTableRowFee}
-                  onBack={() => setCustomSubStep("slab-config")}
-                  onNext={() => setCustomSubStep("confirm")}
-                />
-              )}
-
-              {/* Step D — Confirmation */}
-              {customSubStep === "confirm" && (
-                <ConfirmStep
-                  tableRows={f.customFeeTable}
-                  selectedFields={selectedFields}
-                  sym={sym}
-                  onBack={() => setCustomSubStep("fee-table")}
-                />
-              )}
-            </div>
+                {/* Custom Logic Wizard (Renewal) */}
+                {(f.renewalFeeMode ?? "flat") === "custom" && (
+                  <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                    <div className="bg-slate-50 border-b border-slate-200 px-5 py-3">
+                      <WizardProgress currentSubStep={renewalCustomSubStep} />
+                    </div>
+                    <div className="p-5">
+                      {renewalCustomSubStep === "field-select" && (
+                        <FieldSelectionStep
+                          availableFields={availableFields}
+                          selectedFieldIds={f.renewalCustomFeeFields ?? []}
+                          onToggleField={toggleRenewalFieldSelection}
+                          onNext={() => { if ((f.renewalCustomFeeFields ?? []).length > 0) setRenewalCustomSubStep("slab-config"); }}
+                        />
+                      )}
+                      {renewalCustomSubStep === "slab-config" && (
+                        <SlabConfigStep
+                          selectedFields={renewalSelectedFields}
+                          slabEnabled={renewalSlabEnabled}
+                          slabs={f.renewalCustomFeeSlabs ?? {}}
+                          onToggleSlabEnabled={(id, val) => setRenewalSlabEnabled({ ...renewalSlabEnabled, [id]: val })}
+                          onAddSlab={addRenewalSlabEntry}
+                          onUpdateSlab={updateRenewalSlabEntry}
+                          onRemoveSlab={removeRenewalSlabEntry}
+                          onBack={() => setRenewalCustomSubStep("field-select")}
+                          onNext={generateRenewalFeeTable}
+                        />
+                      )}
+                      {renewalCustomSubStep === "fee-table" && (
+                        <FeeTableStep
+                          tableRows={f.renewalCustomFeeTable ?? []}
+                          selectedFields={renewalSelectedFields}
+                          sym={sym}
+                          onUpdateRowFee={updateRenewalTableRowFee}
+                          onBack={() => setRenewalCustomSubStep("slab-config")}
+                          onNext={() => setRenewalCustomSubStep("confirm")}
+                        />
+                      )}
+                      {renewalCustomSubStep === "confirm" && (
+                        <ConfirmStep
+                          tableRows={f.renewalCustomFeeTable ?? []}
+                          selectedFields={renewalSelectedFields}
+                          sym={sym}
+                          onBack={() => setRenewalCustomSubStep("fee-table")}
+                          additionalComponents={f.renewalAdditionalFeeComponents ?? []}
+                          onAddComponent={() => addAdditionalComponent(true)}
+                          onUpdateComponent={(id, patch) => updateAdditionalComponent(true, id, patch)}
+                          onRemoveComponent={(id) => removeAdditionalComponent(true, id)}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         )}
 
       </div>
     </StepWrapper>
   );
+}
+
+// ── Shared fee-table builder ──────────────────────────────────────────────────
+
+function buildFeeTable(
+  selectedFieldIds: string[],
+  customFeeSlabs: Record<string, CustomFeeSlabEntry[]>,
+  slabEnabled: Record<string, boolean>,
+  availableFields: AvailableFeeField[],
+  config: ImplementationConfig,
+  existingTable: Array<Record<string, string | number>>,
+): Array<Record<string, string | number>> | null {
+  const dims: Array<{ fieldId: string; values: string[] }> = [];
+
+  for (const fieldId of selectedFieldIds) {
+    const field = availableFields.find((af) => af.id === fieldId);
+    if (!field) continue;
+
+    if (supportsSlab(field.fieldType) && slabEnabled[fieldId]) {
+      const slabs = customFeeSlabs[fieldId] ?? [];
+      const values = slabs.map((s, i) => s.label || `${s.lowerBound}–${s.upperBound}` || `Slab ${i + 1}`);
+      if (values.length > 0) dims.push({ fieldId, values });
+    } else if (field.fieldType === "dropdown") {
+      const cf = config.formConfig.customFields.find((x) => x.id === fieldId);
+      const opts = cf?.dropdownOptions ?? [];
+      if (opts.length > 0) {
+        dims.push({ fieldId, values: opts });
+      } else {
+        dims.push({ fieldId, values: [`${field.name} Option 1`, `${field.name} Option 2`] });
+      }
+    } else {
+      dims.push({ fieldId, values: [field.name] });
+    }
+  }
+
+  if (dims.length === 0) return null;
+
+  let rows: Array<Record<string, string | number>> = [{}];
+  for (const dim of dims) {
+    const expanded: Array<Record<string, string | number>> = [];
+    for (const row of rows) {
+      for (const val of dim.values) {
+        expanded.push({ ...row, [dim.fieldId]: val });
+      }
+    }
+    rows = expanded;
+  }
+
+  const existingMap = new Map<string, number>();
+  for (const row of existingTable) {
+    const key = Object.entries(row)
+      .filter(([k]) => k !== "__fee")
+      .map(([k, v]) => `${k}=${v}`)
+      .sort()
+      .join("|");
+    existingMap.set(key, Number(row.__fee ?? 0));
+  }
+
+  return rows.map((row) => {
+    const key = Object.entries(row)
+      .map(([k, v]) => `${k}=${v}`)
+      .sort()
+      .join("|");
+    return { ...row, __fee: existingMap.get(key) ?? 0 };
+  });
 }
 
 // ── Mode Card ─────────────────────────────────────────────────────────────────
@@ -462,7 +722,7 @@ function FieldSelectionStep({ availableFields, selectedFieldIds, onToggleField, 
         </p>
       </div>
 
-      {/* All fields — flat list, no "recommended" distinction */}
+      {/* All fields — flat list */}
       <div className="space-y-2">
         {availableFields.map((af) => (
           <FieldCheckRow
@@ -567,7 +827,7 @@ function SlabConfigStep({ selectedFields, slabEnabled, slabs, onToggleSlabEnable
             )}
           </div>
 
-          {/* Slab builder — lowerBound + upperBound, auto-generated label, NO fee amount */}
+          {/* Slab builder */}
           {supportsSlab(field.fieldType) && slabEnabled[field.id] && (
             <div className="p-4 space-y-2">
               <p className="text-xs text-slate-500">
@@ -612,7 +872,6 @@ function SlabConfigStep({ selectedFields, slabEnabled, slabs, onToggleSlabEnable
                         onUpdateSlab(field.id, idx, { upperBound: ub, label: newLabel });
                       }}
                     />
-                    {/* Auto-generated label chip — read-only display, shows current computed label */}
                     <div className="px-3 py-2.5 flex items-center gap-1.5">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-mono text-blue-700 shrink-0">
                         {displayLabel}
@@ -788,11 +1047,15 @@ function FeeTableStep({ tableRows, selectedFields, sym, onUpdateRowFee, onBack, 
 
 // ── Step D: Confirmation ──────────────────────────────────────────────────────
 
-function ConfirmStep({ tableRows, selectedFields, sym, onBack }: {
+function ConfirmStep({ tableRows, selectedFields, sym, onBack, additionalComponents, onAddComponent, onUpdateComponent, onRemoveComponent }: {
   tableRows: Array<Record<string, number | string>>;
   selectedFields: AvailableFeeField[];
   sym: string;
   onBack: () => void;
+  additionalComponents: AdditionalFeeComponent[];
+  onAddComponent: () => void;
+  onUpdateComponent: (id: string, patch: Partial<AdditionalFeeComponent>) => void;
+  onRemoveComponent: (id: string) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -844,6 +1107,16 @@ function ConfirmStep({ tableRows, selectedFields, sym, onBack }: {
         )}
       </div>
 
+      {/* Additional Fee Components */}
+      <AdditionalFeeComponents
+        components={additionalComponents}
+        sym={sym}
+        baseFeeLabel="base license fee"
+        onAdd={onAddComponent}
+        onUpdate={onUpdateComponent}
+        onRemove={onRemoveComponent}
+      />
+
       <div className="flex items-center justify-between pt-2 border-t border-slate-100">
         <button onClick={onBack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
           <ArrowLeft size={14} /> Edit Table
@@ -853,6 +1126,117 @@ function ConfirmStep({ tableRows, selectedFields, sym, onBack }: {
           Looks good — use the <strong>Save &amp; Continue</strong> button below to proceed.
         </div>
       </div>
+    </div>
+  );
+}
+
+// ── Additional Fee Components ─────────────────────────────────────────────────
+
+function AdditionalFeeComponents({
+  components,
+  sym,
+  baseFeeLabel,
+  onAdd,
+  onUpdate,
+  onRemove,
+}: {
+  components: AdditionalFeeComponent[];
+  sym: string;
+  baseFeeLabel: string;
+  onAdd: () => void;
+  onUpdate: (id: string, patch: Partial<AdditionalFeeComponent>) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="space-y-3 pt-4 border-t border-slate-100">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-800">Additional Fee Components</p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Add surcharges, taxes, or levies — flat amounts or a % of the {baseFeeLabel}.
+          </p>
+        </div>
+        <button
+          onClick={onAdd}
+          className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium px-3 py-1.5 border border-blue-200 rounded-lg bg-blue-50 hover:bg-blue-100 transition-colors"
+        >
+          <Plus size={12} /> Add component
+        </button>
+      </div>
+
+      {components.length === 0 ? (
+        <p className="text-xs text-slate-400 italic">No additional components added. Click "Add component" to define taxes, surcharges, etc.</p>
+      ) : (
+        <div className="space-y-2">
+          {/* Header row */}
+          <div className="grid grid-cols-[1fr_130px_120px_32px] gap-2 text-xs font-semibold text-slate-500 uppercase tracking-wide px-1">
+            <span>Label</span>
+            <span>Type</span>
+            <span>Value</span>
+            <span />
+          </div>
+          {components.map((comp) => (
+            <div key={comp.id} className="grid grid-cols-[1fr_130px_120px_32px] gap-2 items-center">
+              <input
+                type="text"
+                className={`${inputCls} w-full`}
+                placeholder="e.g. GST, Surcharge"
+                value={comp.label}
+                onChange={(e) => onUpdate(comp.id, { label: e.target.value })}
+              />
+              <select
+                className={`${inputCls} w-full`}
+                value={comp.type}
+                onChange={(e) => onUpdate(comp.id, { type: e.target.value as "flat" | "percentage" })}
+              >
+                <option value="flat">Flat amount</option>
+                <option value="percentage">Percentage (%)</option>
+              </select>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                  {comp.type === "flat" ? sym : "%"}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  className={`${inputCls} pl-8 w-full`}
+                  placeholder="0"
+                  value={comp.value || ""}
+                  onChange={(e) => onUpdate(comp.id, { value: Number(e.target.value) })}
+                />
+              </div>
+              <button
+                onClick={() => onRemove(comp.id)}
+                className="flex items-center justify-center text-slate-300 hover:text-red-500 transition-colors"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+
+          {/* Read-only summary */}
+          {components.some((c) => c.label && c.value > 0) && (
+            <div className="mt-3 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5">
+              <p className="text-xs text-slate-500 font-medium mb-1">Total formula:</p>
+              <p className="text-xs text-slate-700 leading-relaxed">
+                Base {baseFeeLabel}
+                {components
+                  .filter((c) => c.label || c.value > 0)
+                  .map((c) => (
+                    <span key={c.id}>
+                      {" "}+ <span className="font-medium">{c.label || "(unlabelled)"}</span>
+                      {": "}
+                      {c.type === "flat"
+                        ? <span className="font-mono">{sym}{c.value.toLocaleString()}</span>
+                        : <span className="font-mono">{c.value}% of base</span>
+                      }
+                    </span>
+                  ))}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

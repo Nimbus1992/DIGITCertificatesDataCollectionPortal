@@ -151,11 +151,23 @@ export default function App() {
         if (!parsed.fees.customFeeFields)            parsed.fees.customFeeFields = [];
         if (!parsed.fees.customFeeSlabs)             parsed.fees.customFeeSlabs  = {};
         if (!parsed.fees.customFeeTable)             parsed.fees.customFeeTable  = [];
-        if (!parsed.workflow.stages)         parsed.workflow.stages         = DEFAULT_CONFIG.workflow.stages;
-        if (!parsed.workflow.checklistItems) parsed.workflow.checklistItems = DEFAULT_CONFIG.workflow.checklistItems;
-        if (parsed.notes === undefined)      parsed.notes = "";
+        if (!parsed.fees.additionalFeeComponents)    parsed.fees.additionalFeeComponents = [];
+        if (!parsed.fees.renewalFeeMode)             parsed.fees.renewalFeeMode = "flat";
+        if (parsed.fees.renewalFlatFeeAmount === undefined) parsed.fees.renewalFlatFeeAmount = 0;
+        if (!parsed.fees.renewalCustomFeeFields)     parsed.fees.renewalCustomFeeFields = [];
+        if (!parsed.fees.renewalCustomFeeSlabs)      parsed.fees.renewalCustomFeeSlabs  = {};
+        if (!parsed.fees.renewalCustomFeeTable)      parsed.fees.renewalCustomFeeTable  = [];
+        if (!parsed.fees.renewalAdditionalFeeComponents) parsed.fees.renewalAdditionalFeeComponents = [];
+        if (!parsed.workflow.stages)                parsed.workflow.stages               = DEFAULT_CONFIG.workflow.stages;
+        if (!parsed.workflow.checklistItems)        parsed.workflow.checklistItems        = DEFAULT_CONFIG.workflow.checklistItems;
+        if (!parsed.workflow.renewalStages)         parsed.workflow.renewalStages         = [];
+        if (!parsed.workflow.renewalChecklistItems) parsed.workflow.renewalChecklistItems = [];
+        if (parsed.notes === undefined)             parsed.notes = "";
         if (parsed.paymentsNotifications.notificationChannels.ussd === undefined) parsed.paymentsNotifications.notificationChannels.ussd = false;
         if (!parsed.paymentsNotifications.notificationTemplates) parsed.paymentsNotifications.notificationTemplates = DEFAULT_CONFIG.paymentsNotifications.notificationTemplates;
+        if (parsed.roles) {
+          parsed.roles.forEach((r) => { if (!r.staffMembers) r.staffMembers = []; });
+        }
         return parsed;
       } catch { /* fall through */ }
     }
@@ -221,13 +233,25 @@ export default function App() {
     if (!loaded.fees.customFeeFields)            loaded.fees.customFeeFields = [];
     if (!loaded.fees.customFeeSlabs)             loaded.fees.customFeeSlabs  = {};
     if (!loaded.fees.customFeeTable)             loaded.fees.customFeeTable  = [];
-    if (!loaded.workflow.stages)         loaded.workflow.stages       = DEFAULT_CONFIG.workflow.stages;
-    if (!loaded.workflow.checklistItems) loaded.workflow.checklistItems = DEFAULT_CONFIG.workflow.checklistItems;
-    if (loaded.notes === undefined)      loaded.notes                 = "";
+    if (!loaded.fees.additionalFeeComponents)    loaded.fees.additionalFeeComponents = [];
+    if (!loaded.fees.renewalFeeMode)             loaded.fees.renewalFeeMode = "flat";
+    if (loaded.fees.renewalFlatFeeAmount === undefined) loaded.fees.renewalFlatFeeAmount = 0;
+    if (!loaded.fees.renewalCustomFeeFields)     loaded.fees.renewalCustomFeeFields = [];
+    if (!loaded.fees.renewalCustomFeeSlabs)      loaded.fees.renewalCustomFeeSlabs  = {};
+    if (!loaded.fees.renewalCustomFeeTable)      loaded.fees.renewalCustomFeeTable  = [];
+    if (!loaded.fees.renewalAdditionalFeeComponents) loaded.fees.renewalAdditionalFeeComponents = [];
+    if (!loaded.workflow.stages)                loaded.workflow.stages               = DEFAULT_CONFIG.workflow.stages;
+    if (!loaded.workflow.checklistItems)        loaded.workflow.checklistItems        = DEFAULT_CONFIG.workflow.checklistItems;
+    if (!loaded.workflow.renewalStages)         loaded.workflow.renewalStages         = [];
+    if (!loaded.workflow.renewalChecklistItems) loaded.workflow.renewalChecklistItems = [];
+    if (loaded.notes === undefined)             loaded.notes                         = "";
     if (!loaded.overall.licenseValidityMode) loaded.overall.licenseValidityMode = "fixed";
     if (!loaded.overall.licenseIdFormat)     loaded.overall.licenseIdFormat     = "LIC-YYYY-NNNNNN";
     if (loaded.paymentsNotifications.notificationChannels.ussd === undefined) loaded.paymentsNotifications.notificationChannels.ussd = false;
     if (!loaded.paymentsNotifications.notificationTemplates) loaded.paymentsNotifications.notificationTemplates = DEFAULT_CONFIG.paymentsNotifications.notificationTemplates;
+    if (loaded.roles) {
+      loaded.roles.forEach((r) => { if (!r.staffMembers) r.staffMembers = []; });
+    }
     return loaded;
   }
 

@@ -4,7 +4,7 @@ import type { ImplementationConfig, DeploymentConfig, BoundaryLevel } from "../t
 import { StepWrapper } from "./StepWrapper";
 import {
   Download, Upload, FileSpreadsheet,
-  Map, CheckCircle2, AlertCircle, Info, Star,
+  Map, CheckCircle2, AlertCircle, Info, Star, Loader2, Play,
 } from "lucide-react";
 
 interface Props {
@@ -43,6 +43,10 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
   const [shapefileError, setShapefileError] = useState("");
   const [parseError, setParseError] = useState("");
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isProcessed, setIsProcessed] = useState(false);
+  // Local boundary name state (mirrors config.deployment.hierarchyName for the top-level input)
+  const [localHierarchyName, setLocalHierarchyName] = useState(d.hierarchyName ?? "");
   const shapefileInputRef = useRef<HTMLInputElement>(null);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,9 +88,10 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
     }
     const stem = fileStem(file.name);
     const autoLevels = mockLevels(stem);
+    setIsProcessed(false);
     set({
       shapefileName: file.name,
-      hierarchyName: stem,
+      hierarchyName: localHierarchyName || stem,
       hierarchyLevels: autoLevels,
       boundaryRows: [],
       uploadMethod: "shapefile",
@@ -176,6 +181,7 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
 
         if (errors.length > 0) { setValidationErrors(errors); return; }
 
+        setIsProcessed(false);
         set({
           boundaryRows: parsed,
           uploadMethod: "excel",
@@ -190,6 +196,7 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
 
   // ── Validate step ─────────────────────────────────────────────────────────
   const handleNext = () => {
+    if (!localHierarchyName.trim()) { setStepError("Please enter a boundary name."); return; }
     if (!uploadMethod) { setStepError("Please select an upload method."); return; }
     if (levels.length === 0) { setStepError("Add at least one hierarchy level."); return; }
     if (levels.some((l) => !l.name.trim())) { setStepError("All hierarchy levels must have a name."); return; }
@@ -200,6 +207,52 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
   const extraCols = rows.length > 0
     ? Object.keys(rows[0]).filter((k) => !levels.some((l) => l.name === k))
     : [];
+
+  // Mock boundary preview rows for shapefile (5 rows using the detected level names)
+  const mockShapefileRows = levels.length > 0
+    ? [
+        levels.reduce<Record<string, string>>((acc, l, i) => {
+          const sampleValues = [
+            ["Abuja", "Municipal Area Council", "Garki", "Ward 1", "Plot 12"],
+            ["Lagos", "Ikeja", "Alausa", "Block A", "Unit 3"],
+            ["Kano", "Kano Municipal", "Fagge", "Zone 2", "House 7"],
+            ["Enugu", "Enugu North", "Independence Layout", "Sector B", "Plot 5"],
+            ["Port Harcourt", "Obio-Akpor", "Rumuola", "Cell 3", "No. 9"],
+          ];
+          acc[l.name] = sampleValues[0][i] ?? `${l.name} Value`;
+          return acc;
+        }, {}),
+        levels.reduce<Record<string, string>>((acc, l, i) => {
+          const sampleValues = [["Lagos", "Ikeja", "Alausa", "Block A", "Unit 3"]];
+          acc[l.name] = sampleValues[0][i] ?? `${l.name} Value`;
+          return acc;
+        }, {}),
+        levels.reduce<Record<string, string>>((acc, l, i) => {
+          const sampleValues = [["Kano", "Kano Municipal", "Fagge", "Zone 2", "House 7"]];
+          acc[l.name] = sampleValues[0][i] ?? `${l.name} Value`;
+          return acc;
+        }, {}),
+        levels.reduce<Record<string, string>>((acc, l, i) => {
+          const sampleValues = [["Enugu", "Enugu North", "Independence Layout", "Sector B", "Plot 5"]];
+          acc[l.name] = sampleValues[0][i] ?? `${l.name} Value`;
+          return acc;
+        }, {}),
+        levels.reduce<Record<string, string>>((acc, l, i) => {
+          const sampleValues = [["Port Harcourt", "Obio-Akpor", "Rumuola", "Cell 3", "No. 9"]];
+          acc[l.name] = sampleValues[0][i] ?? `${l.name} Value`;
+          return acc;
+        }, {}),
+      ]
+    : [];
+
+  const handleProcess = () => {
+    setIsProcessing(true);
+    setIsProcessed(false);
+    setTimeout(() => {
+      setIsProcessing(false);
+      setIsProcessed(true);
+    }, 1500);
+  };
 
   return (
     <StepWrapper
@@ -220,10 +273,36 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
           </p>
         </div>
 
-        {/* ── Section 1: Choose upload method ──────────────────────────────── */}
+        {/* ── Section 1: Boundary Name (must fill before upload options appear) ── */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
-            <h3 className="text-sm font-semibold text-slate-800">1. Choose Upload Method</h3>
+            <h3 className="text-sm font-semibold text-slate-800">1. Boundary Name</h3>
+            <p className="text-xs text-slate-500 mt-0.5">Give your boundary dataset a name before uploading</p>
+          </div>
+          <div className="p-5">
+            <input
+              type="text"
+              className={inputCls}
+              placeholder="e.g. Nigeria Administrative Boundaries"
+              value={localHierarchyName}
+              onChange={(e) => {
+                setLocalHierarchyName(e.target.value);
+                set({ hierarchyName: e.target.value });
+                // Reset processed state if name changes
+                if (isProcessed) { setIsProcessed(false); }
+              }}
+            />
+            {!localHierarchyName.trim() && (
+              <p className="text-xs text-slate-400 mt-2">Enter a boundary name to reveal the upload options below.</p>
+            )}
+          </div>
+        </div>
+
+        {/* ── Section 2: Choose upload method (only shown after boundary name is set) ── */}
+        {localHierarchyName.trim() && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
+            <h3 className="text-sm font-semibold text-slate-800">2. Choose Upload Method</h3>
             <p className="text-xs text-slate-500 mt-0.5">Select how you want to provide boundary data — you can change this at any time</p>
           </div>
           <div className="p-5">
@@ -237,7 +316,8 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
                   setValidationErrors([]);
                   // Only reset if switching away from current method
                   if (uploadMethod !== "shapefile") {
-                    set({ uploadMethod: "shapefile", shapefileName: "", hierarchyLevels: [], hierarchyName: "", boundaryRows: [], operatingLevel: 0 });
+                    setIsProcessed(false);
+                    set({ uploadMethod: "shapefile", shapefileName: "", hierarchyLevels: [], hierarchyName: localHierarchyName, boundaryRows: [], operatingLevel: 0 });
                   }
                 }}
                 className={`rounded-xl border-2 p-4 text-left transition-all relative ${uploadMethod === "shapefile" ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:border-slate-300 bg-white"}`}
@@ -264,7 +344,8 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
                   setParseError("");
                   setValidationErrors([]);
                   if (uploadMethod !== "excel") {
-                    set({ uploadMethod: "excel", shapefileName: "", hierarchyLevels: [], hierarchyName: "", boundaryRows: [], operatingLevel: 0 });
+                    setIsProcessed(false);
+                    set({ uploadMethod: "excel", shapefileName: "", hierarchyLevels: [], hierarchyName: localHierarchyName, boundaryRows: [], operatingLevel: 0 });
                     setExcelLevelDraft(Array(excelLevelCount).fill(""));
                   }
                 }}
@@ -283,12 +364,13 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
             </div>
           </div>
         </div>
+        )}
 
-        {/* ── Section 2: Shapefile flow ─────────────────────────────────────── */}
-        {uploadMethod === "shapefile" && (
+        {/* ── Section 3: Shapefile flow ─────────────────────────────────────── */}
+        {localHierarchyName.trim() && uploadMethod === "shapefile" && (
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
-              <h3 className="text-sm font-semibold text-slate-800">2. Upload Shapefile</h3>
+              <h3 className="text-sm font-semibold text-slate-800">3. Upload Shapefile</h3>
               <p className="text-xs text-slate-500 mt-0.5">Hierarchy levels and name will be auto-populated from the file — you can edit them after upload</p>
             </div>
             <div className="p-5 space-y-4">
@@ -406,27 +488,103 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
                 </div>
               )}
 
-              {/* Confirmation tile — shapefile uploaded */}
+              {/* Process button + preview — shapefile uploaded */}
               {shapefileName && !shapefileError && (
-                <div className="border border-emerald-200 bg-emerald-50 rounded-xl px-5 py-4 flex items-start gap-3">
-                  <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-semibold text-slate-800">Data uploaded</p>
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      <span className="font-medium text-slate-700">{shapefileName}</span> — boundary geometry will be processed on submission. The <strong>operating level</strong> you selected will appear as an address field in the Application Form and as a filter in the Admin Dashboard.
-                    </p>
-                  </div>
+                <div className="space-y-4">
+                  {!isProcessed ? (
+                    <button
+                      type="button"
+                      onClick={handleProcess}
+                      disabled={isProcessing}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 size={16} className="animate-spin" />
+                          Processing…
+                        </>
+                      ) : (
+                        <>
+                          <Play size={15} className="fill-white" />
+                          Process Boundary Data
+                        </>
+                      )}
+                    </button>
+                  ) : (
+                    <>
+                      {/* Data preview */}
+                      <div className="border border-slate-200 rounded-xl overflow-hidden">
+                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
+                          <CheckCircle2 size={15} className="text-emerald-500 shrink-0" />
+                          <p className="text-sm font-semibold text-slate-800">Boundary data preview</p>
+                          <span className="ml-auto text-xs text-slate-400">5 sample rows</span>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="bg-slate-50 border-b border-slate-200">
+                                <th className="px-3 py-2 text-left text-xs font-semibold text-slate-400 w-8">#</th>
+                                {levels.map((l, li) => (
+                                  <th
+                                    key={l.id}
+                                    className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider ${
+                                      li === operatingLevel ? "text-purple-700 bg-purple-50" : "text-slate-500"
+                                    }`}
+                                  >
+                                    {l.name}
+                                    {li === operatingLevel && (
+                                      <span className="ml-1.5 text-xs bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded normal-case font-medium">operating</span>
+                                    )}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                              {mockShapefileRows.map((row, i) => (
+                                <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                                  <td className="px-3 py-2 text-xs text-slate-300">{i + 1}</td>
+                                  {levels.map((l, li) => (
+                                    <td
+                                      key={l.id}
+                                      className={`px-3 py-2 text-xs ${
+                                        li === operatingLevel
+                                          ? "font-medium text-slate-800 bg-purple-50/40"
+                                          : "text-slate-600"
+                                      }`}
+                                    >
+                                      {row[l.name] ?? "—"}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Confirmation tile */}
+                      <div className="border border-emerald-200 bg-emerald-50 rounded-xl px-5 py-4 flex items-start gap-3">
+                        <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">{localHierarchyName || shapefileName}</p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            Boundary data processed successfully. The <strong>operating level</strong> you selected will appear as an address field in the Application Form and as a filter in the Admin Dashboard.
+                          </p>
+                        </div>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* ── Section 2: Excel flow ─────────────────────────────────────────── */}
-        {uploadMethod === "excel" && (
+        {/* ── Section 3: Excel flow ─────────────────────────────────────────── */}
+        {localHierarchyName.trim() && uploadMethod === "excel" && (
           <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <div className="px-5 py-3 bg-slate-50 border-b border-slate-200">
-              <h3 className="text-sm font-semibold text-slate-800">2. Define Hierarchy &amp; Upload Data</h3>
+              <h3 className="text-sm font-semibold text-slate-800">3. Define Hierarchy &amp; Upload Data</h3>
               <p className="text-xs text-slate-500 mt-0.5">Follow the steps below to generate a template and upload your boundary data</p>
             </div>
             <div className="p-5 space-y-3">
@@ -538,6 +696,7 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
                             e.stopPropagation();
                             set({ boundaryRows: [] });
                             setValidationErrors([]);
+                            setIsProcessed(false);
                           }}
                           className="text-slate-400 hover:text-red-500 text-xs ml-1 transition-colors"
                         >
@@ -592,77 +751,110 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
                     <Upload size={13} /> {rows.length > 0 ? "Replace file" : "Browse files"} (.xlsx / .xls)
                   </button>
 
-                  {/* Operating level — shown after successful upload */}
-                  {rows.length > 0 && levelsReady && (
+                  {/* Process button — shown after successful upload */}
+                  {rows.length > 0 && levelsReady && !isProcessed && (
                     <div className="border-t border-slate-100 pt-3">
-                      <OperatingLevelSelector
-                        levels={levels}
-                        operatingLevel={operatingLevel}
-                        onChange={(v) => set({ operatingLevel: v })}
-                      />
+                      <button
+                        type="button"
+                        onClick={handleProcess}
+                        disabled={isProcessing}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        {isProcessing ? (
+                          <>
+                            <Loader2 size={16} className="animate-spin" />
+                            Processing…
+                          </>
+                        ) : (
+                          <>
+                            <Play size={15} className="fill-white" />
+                            Process Boundary Data
+                          </>
+                        )}
+                      </button>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Step 3 — Data preview */}
-              {rows.length > 0 && levelsReady && (
+              {/* Step 3 — Data preview + operating level + confirmation (after processing) */}
+              {rows.length > 0 && levelsReady && isProcessed && (
                 <div className="flex items-start gap-4 border border-slate-200 rounded-xl p-4">
                   <StepBadge n={3} />
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold text-slate-800">Data preview</p>
-                    <p className="text-xs text-slate-500 mt-0.5 mb-3">
-                      First 5 rows. The <span className="text-purple-700 font-medium">operating level</span> column is highlighted.
-                    </p>
-                    <div className="overflow-x-auto rounded-lg border border-slate-200">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200">
-                            <th className="px-3 py-2 text-left text-xs font-semibold text-slate-400 w-8">#</th>
-                            {levels.map((l, li) => (
-                              <th
-                                key={l.id}
-                                className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider ${
-                                  li === operatingLevel ? "text-purple-700 bg-purple-50" : "text-slate-500"
-                                }`}
-                              >
-                                {l.name}
-                                {li === operatingLevel && (
-                                  <span className="ml-1.5 text-xs bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded normal-case font-medium">operating</span>
-                                )}
-                              </th>
-                            ))}
-                            {extraCols.map((k) => (
-                              <th key={k} className="px-3 py-2 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{k}</th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {rows.slice(0, 5).map((row, i) => (
-                            <tr key={i} className="hover:bg-slate-50/50 transition-colors">
-                              <td className="px-3 py-2 text-xs text-slate-300">{i + 1}</td>
+                  <div className="flex-1 space-y-4">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-800">Data preview</p>
+                      <p className="text-xs text-slate-500 mt-0.5 mb-3">
+                        First 5 rows. The <span className="text-purple-700 font-medium">operating level</span> column is highlighted.
+                      </p>
+                      <div className="overflow-x-auto rounded-lg border border-slate-200">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                              <th className="px-3 py-2 text-left text-xs font-semibold text-slate-400 w-8">#</th>
                               {levels.map((l, li) => (
-                                <td
+                                <th
                                   key={l.id}
-                                  className={`px-3 py-2 text-xs ${
-                                    li === operatingLevel
-                                      ? "font-medium text-slate-800 bg-purple-50/40"
-                                      : "text-slate-600"
+                                  className={`px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider ${
+                                    li === operatingLevel ? "text-purple-700 bg-purple-50" : "text-slate-500"
                                   }`}
                                 >
-                                  {row[l.name] || <span className="text-slate-300 italic">—</span>}
-                                </td>
+                                  {l.name}
+                                  {li === operatingLevel && (
+                                    <span className="ml-1.5 text-xs bg-purple-100 text-purple-600 px-1.5 py-0.5 rounded normal-case font-medium">operating</span>
+                                  )}
+                                </th>
                               ))}
                               {extraCols.map((k) => (
-                                <td key={k} className="px-3 py-2 text-xs text-slate-400">{row[k]}</td>
+                                <th key={k} className="px-3 py-2 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{k}</th>
                               ))}
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      {rows.length > 5 && (
-                        <p className="px-3 py-2 text-xs text-slate-400 italic border-t border-slate-100">Showing 5 of {rows.length} rows</p>
-                      )}
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {rows.slice(0, 5).map((row, i) => (
+                              <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                                <td className="px-3 py-2 text-xs text-slate-300">{i + 1}</td>
+                                {levels.map((l, li) => (
+                                  <td
+                                    key={l.id}
+                                    className={`px-3 py-2 text-xs ${
+                                      li === operatingLevel
+                                        ? "font-medium text-slate-800 bg-purple-50/40"
+                                        : "text-slate-600"
+                                    }`}
+                                  >
+                                    {row[l.name] || <span className="text-slate-300 italic">—</span>}
+                                  </td>
+                                ))}
+                                {extraCols.map((k) => (
+                                  <td key={k} className="px-3 py-2 text-xs text-slate-400">{row[k]}</td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {rows.length > 5 && (
+                          <p className="px-3 py-2 text-xs text-slate-400 italic border-t border-slate-100">Showing 5 of {rows.length} rows</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Operating level selector below preview */}
+                    <OperatingLevelSelector
+                      levels={levels}
+                      operatingLevel={operatingLevel}
+                      onChange={(v) => set({ operatingLevel: v })}
+                    />
+
+                    {/* Confirmation tile */}
+                    <div className="border border-emerald-200 bg-emerald-50 rounded-xl px-5 py-4 flex items-start gap-3">
+                      <CheckCircle2 size={18} className="text-emerald-500 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{localHierarchyName}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                          {rows.length} rows processed successfully. The <strong>operating level</strong> you selected will appear as an address field in the Application Form and as a filter in the Admin Dashboard.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>

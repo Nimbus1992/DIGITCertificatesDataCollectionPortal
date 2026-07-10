@@ -1,6 +1,6 @@
 import type { ImplementationConfig, StaffRole } from "../types";
 import { StepWrapper } from "./StepWrapper";
-import { Plus, Trash2, Info, GitBranch, Users } from "lucide-react";
+import { Plus, Trash2, Info, GitBranch, Users, AlertTriangle } from "lucide-react";
 
 interface Props {
   config: ImplementationConfig;
@@ -133,8 +133,9 @@ export default function Step5RolesStaff({ config, updateConfig, onNext, onBack, 
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-slate-400 italic">
-                            Not yet assigned to any workflow stage
+                          <span className="inline-flex items-center gap-1.5 text-xs bg-amber-50 border border-amber-200 text-amber-700 font-medium rounded-full px-2.5 py-1">
+                            <AlertTriangle size={11} className="shrink-0" />
+                            Not assigned to any workflow stage
                           </span>
                         )}
                       </div>
