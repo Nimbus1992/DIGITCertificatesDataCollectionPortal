@@ -8,10 +8,27 @@ This document defines the standard operating procedure for how bugs and feature 
 
 | Label | Meaning |
 |---|---|
-| `Planned` | Issue is scoped and ready to be picked up |
+| `Planned` | Issue is scoped and ready to be picked up — new work |
 | `In Progress` | Claude is actively working on it |
 | `For Review` | Fix is implemented, tested, and pushed — awaiting human sign-off on localhost |
+| `Needs Fix` | Human tested and found issues — review comments added, Claude should pick up and address |
 | `Done` | Human has confirmed the fix and closed the issue |
+
+---
+
+## State Machine
+
+```
+Planned ──────────────────────────────► In Progress ──► For Review
+                                                              │
+                                    ┌─────────────────────────┤
+                                    │  approved               │ rejected
+                                    ▼                         ▼
+                                  Done               Needs Fix (you add comments)
+                                                          │
+                                                          ▼
+                                                      In Progress ──► For Review
+```
 
 ---
 
@@ -115,8 +132,22 @@ Once all test cases pass:
 
 1. Open **http://localhost:5174** and navigate to the affected area
 2. Walk through the test cases listed in the issue comments
-3. If satisfied → close the issue (GitHub auto-moves to `Done`)
-4. If changes are needed → reopen the issue, add a comment describing what failed, and set label back to `Planned`
+3. **If satisfied** → close the issue (`Done`)
+4. **If changes are needed** → add a comment on the issue describing exactly what failed or what needs to change, then set the label to `Needs Fix`
+
+---
+
+### Step 7 — Needs Fix Loop
+
+When Claude sees an issue labelled `Needs Fix`:
+
+1. Reads **all comments** on the issue, paying particular attention to the most recent review feedback
+2. Updates label → `In Progress`
+3. Addresses each point raised in the review comments specifically
+4. Re-runs QA against the original test cases **plus** any new criteria from the review comments
+5. Pushes fix, updates label → `For Review`, posts a comment summarising what was changed in response to the review feedback
+
+This loop repeats until the issue is closed.
 
 ---
 
