@@ -38,13 +38,12 @@ const STEP_REVIEW     = 13;  // Review            → Step8ReviewExport
 
 // Application Configuration sub-steps (must be completed in order)
 const APP_CONFIG_STEPS = [
-  { id: 6,  label: "Form Configuration" },
-  { id: 5,  label: "Trade Categories & Overall Config" },
+  { id: 5,  label: "Overall Configuration" },
+  { id: 6,  label: "Application Form" },
   { id: 7,  label: "Roles" },
   { id: 9,  label: "Workflow" },
   { id: 8,  label: "Fees" },
-  { id: 10, label: "Payments & Notifications" },
-  { id: 4,  label: "Integrations" },
+  { id: 10, label: "Notifications" },
 ] as const;
 
 // Users section — locked until all App Config sub-steps are complete
@@ -53,11 +52,14 @@ const STEP_USERS = 11;
 // All App Config step IDs in order
 const APP_CONFIG_STEP_IDS: readonly number[] = APP_CONFIG_STEPS.map((s) => s.id);
 
+const STEP_INTEGRATIONS = 4;
+
 // Ordered list of all steps matching sidebar top-to-bottom layout
 const ORDERED_STEPS: number[] = [
   STEP_ACCOUNT,
   STEP_BOUNDARY,
   STEP_BRANDING,
+  STEP_INTEGRATIONS,
   ...APP_CONFIG_STEP_IDS,
   STEP_USERS,
   STEP_OTHER_INFO,
@@ -70,19 +72,19 @@ const STEP_LABEL: Record<number, string> = {
   2:  "Branding",
   3:  "Boundary",
   4:  "Integrations",
-  5:  "Trade Categories & Overall Config",
-  6:  "Form Configuration",
+  5:  "Overall Configuration",
+  6:  "Application Form",
   7:  "Roles",
   8:  "Fees",
   9:  "Workflow",
-  10: "Payments & Notifications",
+  10: "Notifications",
   11: "Users",
   12: "Other Information",
   13: "Review",
 };
 
 // Free-navigation step IDs (can always be clicked)
-const FREE_NAV_STEPS: number[] = [STEP_ACCOUNT, STEP_BOUNDARY, STEP_BRANDING, STEP_OTHER_INFO, STEP_REVIEW];
+const FREE_NAV_STEPS: number[] = [STEP_ACCOUNT, STEP_BOUNDARY, STEP_BRANDING, STEP_INTEGRATIONS, STEP_OTHER_INFO, STEP_REVIEW];
 
 function loadCompletedSteps(): Set<number> {
   try {
@@ -515,7 +517,10 @@ export default function App() {
             {/* 3. Branding — free nav */}
             <SidebarItem stepId={STEP_BRANDING} label="Branding" />
 
-            {/* 4. Application Configuration — sequential sub-steps, always expanded */}
+            {/* 4. Integrations — free nav, after Branding (Issue #8) */}
+            <SidebarItem stepId={STEP_INTEGRATIONS} label="Integrations" />
+
+            {/* 5. Application Configuration — sequential sub-steps, always expanded */}
             <div className="mt-2">
               <button
                 onClick={() => {
