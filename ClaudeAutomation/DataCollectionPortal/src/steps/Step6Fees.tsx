@@ -264,6 +264,28 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
   const appSelectedFields = availableFields.filter((af) => f.customFeeFields.includes(af.id));
   const renewalSelectedFields = availableFields.filter((af) => (f.renewalCustomFeeFields ?? []).includes(af.id));
 
+  // ── Summary items ───────────────────────────────────────────────────────────
+
+  const feesModeLabel = (mode: string | undefined) => {
+    if (mode === "flat") return "Flat fee";
+    if (mode === "slab") return "Slab-based";
+    if (mode === "custom") return "Custom logic";
+    return "Not configured";
+  };
+
+  const feesSummaryItems = [
+    { label: "Application Fee Mode", value: feesModeLabel(f.feeMode) },
+    ...(f.feeMode === "flat" ? [{ label: "Application Fee", value: `${sym}${f.flatFeeAmount ?? 0}` }] : []),
+    ...(renewalEnabled ? [{ label: "Renewal Fee Mode", value: feesModeLabel(f.renewalFeeMode) }] : []),
+    ...(renewalEnabled && f.renewalFeeMode === "flat" ? [{ label: "Renewal Fee", value: `${sym}${f.renewalFlatFeeAmount ?? 0}` }] : []),
+    {
+      label: "Additional Components",
+      value: (f.additionalFeeComponents ?? []).length > 0
+        ? `${(f.additionalFeeComponents ?? []).length} component${(f.additionalFeeComponents ?? []).length !== 1 ? "s" : ""}`
+        : "None",
+    },
+  ];
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -274,6 +296,8 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      summaryItems={feesSummaryItems}
+      nextSectionLabel="Configure Notifications"
     >
       <div className="space-y-5">
 
