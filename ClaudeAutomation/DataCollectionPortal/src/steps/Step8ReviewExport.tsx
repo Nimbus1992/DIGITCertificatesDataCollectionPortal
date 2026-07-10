@@ -1,9 +1,10 @@
 import { useState } from "react";
 import type { ImplementationConfig } from "../types";
 import { exportAsJson, exportAsPdf } from "../lib/exportUtils";
+import { exportConfigToExcel } from "../lib/exportExcel";
 import { saveConfig } from "../lib/supabase";
 import {
-  CheckCircle2, FileJson, FileText,
+  CheckCircle2, FileJson, FileText, FileSpreadsheet,
   Cloud, Pencil, ArrowLeft, Send
 } from "lucide-react";
 
@@ -225,7 +226,7 @@ export default function Step8ReviewExport({ config, onBack, onGoToStep, updateCo
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
         <p className="text-sm font-semibold text-slate-800 mb-1">Export & Save</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <button
             onClick={() => exportAsJson(config)}
             className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-medium text-slate-700"
@@ -241,6 +242,14 @@ export default function Step8ReviewExport({ config, onBack, onGoToStep, updateCo
           >
             <FileText size={18} className="text-purple-500" />
             {exporting ? "Generating..." : "Download PDF"}
+          </button>
+
+          <button
+            onClick={() => exportConfigToExcel(config)}
+            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 transition-colors text-sm font-medium text-slate-700"
+          >
+            <FileSpreadsheet size={18} className="text-emerald-600" />
+            Export as Excel
           </button>
 
           <button

@@ -110,9 +110,10 @@ export interface FeeSlabRow {
 export type FeesTopLevelMode = "flat" | "custom";
 
 export interface CustomFeeSlabEntry {
-  label: string;      // e.g. "0–100 sq ft"
-  upperBound: number; // upper bound value of this slab range
-  amount: number;     // fee amount for this slab
+  label: string;       // auto-generated or custom, e.g. "0–100"
+  lowerBound: number;  // lower bound value of this slab range
+  upperBound: number;  // upper bound value of this slab range
+  amount?: number;     // kept optional for backward compat; fee is set in the fee table (Step C), not here
 }
 
 export interface FeesConfig {

@@ -16,21 +16,20 @@ import {
   ArrowLeft,
 } from "lucide-react";
 
-// ── Recommended fields available for fee calculation ─────────────────────────
+// ── Available fee fields ──────────────────────────────────────────────────────
 
 interface AvailableFeeField {
   id: string;
   name: string;
   fieldType: "text" | "number" | "date" | "dropdown" | string;
-  source: "recommended" | "custom";
 }
 
-// These are the recommended form fields that commonly drive fee calculations
-const RECOMMENDED_FEE_FIELDS: AvailableFeeField[] = [
-  { id: "rec__business_area",       name: "Business Area",       fieldType: "number",   source: "recommended" },
-  { id: "rec__num_employees",       name: "Number of Employees", fieldType: "number",   source: "recommended" },
-  { id: "rec__trade_category",      name: "Trade Category",      fieldType: "dropdown", source: "recommended" },
-  { id: "rec__is_hazardous",        name: "Is Business Hazardous?", fieldType: "dropdown", source: "recommended" },
+// Standard fields always available for fee calculation (no "recommended" badge — all fields are equal)
+const STANDARD_FEE_FIELDS: AvailableFeeField[] = [
+  { id: "rec__business_area",    name: "Business Area",        fieldType: "number"   },
+  { id: "rec__num_employees",    name: "Number of Employees",  fieldType: "number"   },
+  { id: "rec__annual_turnover",  name: "Annual Turnover",      fieldType: "number"   },
+  { id: "rec__business_type",    name: "Business Type",        fieldType: "dropdown" },
 ];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -91,16 +90,15 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
   // ── Build the combined list of available fields ─────────────────────────────
 
   const availableFields = useMemo((): AvailableFeeField[] => {
-    // Start with recommended fields
-    const list: AvailableFeeField[] = [...RECOMMENDED_FEE_FIELDS];
-    // Add any custom fields from the form config
+    // Start with the standard fields
+    const seen = new Set<string>(STANDARD_FEE_FIELDS.map((f) => f.id));
+    const list: AvailableFeeField[] = [...STANDARD_FEE_FIELDS];
+    // Merge all custom fields from the form config, deduplicated by id
     for (const cf of config.formConfig.customFields) {
-      list.push({
-        id: cf.id,
-        name: cf.name,
-        fieldType: cf.fieldType,
-        source: "custom",
-      });
+      if (!seen.has(cf.id)) {
+        seen.add(cf.id);
+        list.push({ id: cf.id, name: cf.name, fieldType: cf.fieldType });
+      }
     }
     return list;
   }, [config.formConfig.customFields]);
@@ -122,7 +120,7 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
 
   function addSlabEntry(fieldId: string) {
     const current = f.customFeeSlabs[fieldId] ?? [];
-    setSlabEntries(fieldId, [...current, { label: "", upperBound: 0, amount: 0 }]);
+    setSlabEntries(fieldId, [...current, { label: "", lowerBound: 0, upperBound: 0 }]);
   }
 
   function updateSlabEntry(fieldId: string, idx: number, patch: Partial<CustomFeeSlabEntry>) {
@@ -147,7 +145,7 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
 
       if (supportsSlab(field.fieldType) && slabEnabled[fieldId]) {
         const slabs = f.customFeeSlabs[fieldId] ?? [];
-        const values = slabs.map((s) => s.label || `Slab ${slabs.indexOf(s) + 1}`);
+        const values = slabs.map((s, i) => s.label || `${s.lowerBound}–${s.upperBound}` || `Slab ${i + 1}`);
         if (values.length > 0) dims.push({ fieldId, values });
       } else if (field.fieldType === "dropdown") {
         // Use dropdown options if available (custom field), else use placeholder rows
@@ -312,7 +310,6 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
                   selectedFields={selectedFields}
                   slabEnabled={slabEnabled}
                   slabs={f.customFeeSlabs}
-                  sym={sym}
                   onToggleSlabEnabled={(id, val) => setSlabEnabled({ ...slabEnabled, [id]: val })}
                   onAddSlab={addSlabEntry}
                   onUpdateSlab={updateSlabEntry}
@@ -442,43 +439,17 @@ function FieldSelectionStep({ availableFields, selectedFieldIds, onToggleField, 
         </p>
       </div>
 
-      {/* Recommended fields */}
-      {availableFields.filter((f) => f.source === "recommended").length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Recommended Fields</p>
-          <div className="space-y-2">
-            {availableFields
-              .filter((af) => af.source === "recommended")
-              .map((af) => (
-                <FieldCheckRow
-                  key={af.id}
-                  field={af}
-                  checked={selectedFieldIds.includes(af.id)}
-                  onToggle={() => onToggleField(af.id)}
-                />
-              ))}
-          </div>
-        </div>
-      )}
-
-      {/* Custom fields */}
-      {availableFields.filter((f) => f.source === "custom").length > 0 && (
-        <div>
-          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Custom Fields (from Application Form)</p>
-          <div className="space-y-2">
-            {availableFields
-              .filter((af) => af.source === "custom")
-              .map((af) => (
-                <FieldCheckRow
-                  key={af.id}
-                  field={af}
-                  checked={selectedFieldIds.includes(af.id)}
-                  onToggle={() => onToggleField(af.id)}
-                />
-              ))}
-          </div>
-        </div>
-      )}
+      {/* All fields — flat list, no "recommended" distinction */}
+      <div className="space-y-2">
+        {availableFields.map((af) => (
+          <FieldCheckRow
+            key={af.id}
+            field={af}
+            checked={selectedFieldIds.includes(af.id)}
+            onToggle={() => onToggleField(af.id)}
+          />
+        ))}
+      </div>
 
       <div className="flex items-center justify-between pt-2 border-t border-slate-100">
         <span className="text-xs text-slate-500">
@@ -518,20 +489,16 @@ function FieldCheckRow({ field, checked, onToggle }: {
         <span className={`text-sm font-medium ${checked ? "text-blue-800" : "text-slate-800"}`}>{field.name}</span>
       </div>
       <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-500 font-medium capitalize">{fieldTypeLabel(field.fieldType)}</span>
-      {field.source === "recommended" && (
-        <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium">Suggested</span>
-      )}
     </label>
   );
 }
 
 // ── Step B: Slab Configuration ────────────────────────────────────────────────
 
-function SlabConfigStep({ selectedFields, slabEnabled, slabs, sym, onToggleSlabEnabled, onAddSlab, onUpdateSlab, onRemoveSlab, onBack, onNext }: {
+function SlabConfigStep({ selectedFields, slabEnabled, slabs, onToggleSlabEnabled, onAddSlab, onUpdateSlab, onRemoveSlab, onBack, onNext }: {
   selectedFields: AvailableFeeField[];
   slabEnabled: Record<string, boolean>;
   slabs: Record<string, CustomFeeSlabEntry[]>;
-  sym: string;
   onToggleSlabEnabled: (id: string, val: boolean) => void;
   onAddSlab: (id: string) => void;
   onUpdateSlab: (id: string, idx: number, patch: Partial<CustomFeeSlabEntry>) => void;
@@ -543,7 +510,7 @@ function SlabConfigStep({ selectedFields, slabEnabled, slabs, sym, onToggleSlabE
     <div className="space-y-5">
       <div>
         <p className="text-sm font-semibold text-slate-800">Configure slab ranges for each selected field</p>
-        <p className="text-xs text-slate-500 mt-1">For numeric and text fields, you can define fee slabs. For dropdown fields, each option will become a dimension in the fee matrix.</p>
+        <p className="text-xs text-slate-500 mt-1">For numeric and text fields, you can define value ranges (slabs). Fee amounts are set in the next step — slabs only define the ranges here.</p>
       </div>
 
       {selectedFields.map((field) => (
@@ -557,7 +524,7 @@ function SlabConfigStep({ selectedFields, slabEnabled, slabs, sym, onToggleSlabE
 
             {supportsSlab(field.fieldType) && (
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-slate-600">Create fee slabs?</span>
+                <span className="text-xs text-slate-600">Create slabs?</span>
                 <button
                   onClick={() => onToggleSlabEnabled(field.id, !slabEnabled[field.id])}
                   className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${slabEnabled[field.id] ? "bg-blue-600" : "bg-slate-300"}`}
@@ -577,56 +544,67 @@ function SlabConfigStep({ selectedFields, slabEnabled, slabs, sym, onToggleSlabE
             )}
           </div>
 
-          {/* Slab builder */}
+          {/* Slab builder — lowerBound + upperBound, auto-generated label, NO fee amount */}
           {supportsSlab(field.fieldType) && slabEnabled[field.id] && (
             <div className="p-4 space-y-2">
-              <p className="text-xs text-slate-500">Add rows for each slab range. The system will create fee matrix columns for each slab.</p>
+              <p className="text-xs text-slate-500">
+                Define the numeric ranges for each slab. The label is auto-generated from the bounds but can be overridden.
+                Fee amounts are configured in the next step.
+              </p>
 
               {/* Table header */}
-              <div className="grid grid-cols-[1fr_140px_120px_32px] bg-slate-50 border border-slate-200 rounded-lg overflow-hidden text-xs font-semibold text-slate-500 uppercase tracking-wide">
-                <span className="px-3 py-2">Range Label</span>
+              <div className="grid grid-cols-[120px_120px_1fr_32px] bg-slate-50 border border-slate-200 rounded-lg overflow-hidden text-xs font-semibold text-slate-500 uppercase tracking-wide">
+                <span className="px-3 py-2">Lower Bound</span>
                 <span className="px-3 py-2">Upper Bound</span>
-                <span className="px-3 py-2">Fee ({sym})</span>
+                <span className="px-3 py-2">Label (auto)</span>
                 <span className="px-3 py-2" />
               </div>
 
-              {(slabs[field.id] ?? []).map((slab, idx) => (
-                <div key={idx} className="grid grid-cols-[1fr_140px_120px_32px] items-center gap-1 border border-slate-200 rounded-lg overflow-hidden">
-                  <input
-                    type="text"
-                    className="px-3 py-2.5 text-sm border-r border-slate-100 focus:outline-none focus:bg-blue-50 bg-transparent"
-                    placeholder={`e.g. 0–${(idx + 1) * 100} sq ft`}
-                    value={slab.label}
-                    onChange={(e) => onUpdateSlab(field.id, idx, { label: e.target.value })}
-                  />
-                  <input
-                    type="number"
-                    min={0}
-                    className="px-3 py-2.5 text-sm border-r border-slate-100 focus:outline-none focus:bg-blue-50 bg-transparent"
-                    placeholder="100"
-                    value={slab.upperBound || ""}
-                    onChange={(e) => onUpdateSlab(field.id, idx, { upperBound: Number(e.target.value) })}
-                  />
-                  <div className="relative px-2 py-1.5">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">{sym}</span>
+              {(slabs[field.id] ?? []).map((slab, idx) => {
+                const autoLabel = `${slab.lowerBound ?? 0}–${slab.upperBound ?? 0}`;
+                const displayLabel = slab.label || autoLabel;
+                return (
+                  <div key={idx} className="grid grid-cols-[120px_120px_1fr_32px] items-center gap-1 border border-slate-200 rounded-lg overflow-hidden">
                     <input
                       type="number"
                       min={0}
-                      className="w-full pl-6 pr-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-blue-400 rounded bg-transparent"
+                      className="px-3 py-2.5 text-sm border-r border-slate-100 focus:outline-none focus:bg-blue-50 bg-transparent"
                       placeholder="0"
-                      value={slab.amount || ""}
-                      onChange={(e) => onUpdateSlab(field.id, idx, { amount: Number(e.target.value) })}
+                      value={slab.lowerBound ?? ""}
+                      onChange={(e) => {
+                        const lb = Number(e.target.value);
+                        const newLabel = slab.label ? slab.label : `${lb}–${slab.upperBound ?? 0}`;
+                        onUpdateSlab(field.id, idx, { lowerBound: lb, label: newLabel });
+                      }}
                     />
+                    <input
+                      type="number"
+                      min={0}
+                      className="px-3 py-2.5 text-sm border-r border-slate-100 focus:outline-none focus:bg-blue-50 bg-transparent"
+                      placeholder="100"
+                      value={slab.upperBound || ""}
+                      onChange={(e) => {
+                        const ub = Number(e.target.value);
+                        const newLabel = slab.label ? slab.label : `${slab.lowerBound ?? 0}–${ub}`;
+                        onUpdateSlab(field.id, idx, { upperBound: ub, label: newLabel });
+                      }}
+                    />
+                    {/* Auto-generated label chip — read-only display, shows current computed label */}
+                    <div className="px-3 py-2.5 flex items-center gap-1.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-mono text-blue-700 shrink-0">
+                        {displayLabel}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center">
+                      {(slabs[field.id] ?? []).length > 1 ? (
+                        <button onClick={() => onRemoveSlab(field.id, idx)} className="text-slate-300 hover:text-red-500 transition-colors p-1">
+                          <Trash2 size={13} />
+                        </button>
+                      ) : <span className="w-6 block" />}
+                    </div>
                   </div>
-                  <div className="flex items-center justify-center">
-                    {(slabs[field.id] ?? []).length > 1 ? (
-                      <button onClick={() => onRemoveSlab(field.id, idx)} className="text-slate-300 hover:text-red-500 transition-colors p-1">
-                        <Trash2 size={13} />
-                      </button>
-                    ) : <span className="w-6 block" />}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
 
               <button
                 onClick={() => onAddSlab(field.id)}
@@ -683,6 +661,9 @@ function FeeTableStep({ tableRows, selectedFields, sym, onUpdateRowFee, onBack, 
 }) {
   const fieldCols = selectedFields;
 
+  // Validate: every fee cell must be > 0
+  const hasZeroFee = tableRows.some((row) => !Number(row.__fee) || Number(row.__fee) <= 0);
+
   if (tableRows.length === 0) {
     return (
       <div className="space-y-4">
@@ -718,31 +699,43 @@ function FeeTableStep({ tableRows, selectedFields, sym, onUpdateRowFee, onBack, 
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {tableRows.map((row, ridx) => (
-              <tr key={ridx} className="hover:bg-slate-50/50 transition-colors">
-                {fieldCols.map((f) => (
-                  <td key={f.id} className="px-4 py-2.5 text-sm text-slate-700 whitespace-nowrap">
-                    {String(row[f.id] ?? "—")}
+            {tableRows.map((row, ridx) => {
+              const feeVal = Number(row.__fee);
+              const cellIsZero = !feeVal || feeVal <= 0;
+              return (
+                <tr key={ridx} className={`hover:bg-slate-50/50 transition-colors ${cellIsZero ? "bg-red-50/30" : ""}`}>
+                  {fieldCols.map((f) => (
+                    <td key={f.id} className="px-4 py-2.5 text-sm text-slate-700 whitespace-nowrap">
+                      {String(row[f.id] ?? "—")}
+                    </td>
+                  ))}
+                  <td className="px-4 py-2.5">
+                    <div className="relative w-32">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">{sym}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        className={`w-full pl-7 pr-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${cellIsZero ? "border-red-400 bg-red-50" : "border-slate-200"}`}
+                        value={feeVal || ""}
+                        placeholder="0"
+                        onChange={(e) => onUpdateRowFee(ridx, Number(e.target.value))}
+                      />
+                    </div>
                   </td>
-                ))}
-                <td className="px-4 py-2.5">
-                  <div className="relative w-32">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">{sym}</span>
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-full pl-7 pr-2 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={Number(row.__fee) || ""}
-                      placeholder="0"
-                      onChange={(e) => onUpdateRowFee(ridx, Number(e.target.value))}
-                    />
-                  </div>
-                </td>
-              </tr>
-            ))}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {/* Zero-fee validation banner */}
+      {hasZeroFee && (
+        <div className="flex items-start gap-3 bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+          <AlertCircle size={14} className="text-red-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-red-700 font-medium">All fee amounts must be greater than zero. Please fill in every row before continuing.</p>
+        </div>
+      )}
 
       {/* Running total */}
       <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 flex items-center justify-between">
@@ -754,7 +747,15 @@ function FeeTableStep({ tableRows, selectedFields, sym, onUpdateRowFee, onBack, 
         <button onClick={onBack} className="flex items-center gap-1.5 px-4 py-2 rounded-lg border border-slate-300 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
           <ArrowLeft size={14} /> Back
         </button>
-        <button onClick={onNext} className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors">
+        <button
+          onClick={onNext}
+          disabled={hasZeroFee}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            hasZeroFee
+              ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+              : "bg-blue-600 text-white hover:bg-blue-700"
+          }`}
+        >
           Review & Confirm <ChevronRight size={14} />
         </button>
       </div>
