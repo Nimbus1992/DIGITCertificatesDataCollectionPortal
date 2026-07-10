@@ -1,116 +1,112 @@
 import { useState } from "react";
-import type { ImplementationConfig, WorkflowConfig, WorkflowStage, WorkflowAction, WorkflowNotification, WorkflowChecklistItem } from "../types";
+import type {
+  ImplementationConfig,
+  WorkflowConfig,
+  WorkflowStage,
+  WorkflowAction,
+  WorkflowNotification,
+  WorkflowChecklistItem,
+} from "../types";
 import { StepWrapper } from "./StepWrapper";
 import {
-  Plus, Trash2, Edit2, Lock, Mail, MessageSquare, Bell,
-  ChevronDown, ChevronUp, CheckSquare, ArrowRight, RotateCcw,
+  Plus, Trash2, ChevronDown, ChevronUp, Bell, Mail, MessageSquare,
+  CheckSquare, RotateCcw,
 } from "lucide-react";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
-const DEFAULT_STAGES: WorkflowStage[] = [
-  {
-    id: "submitted",
-    name: "Application Submitted",
-    actor: "Citizen",
-    actions: [],
-    slaHours: 0,
-    notifications: [],
-    checklistEnabled: false,
-    isStart: true,
-  },
-  {
-    id: "pending_doc_verification",
-    name: "Pending Document Verification",
-    actor: "Document Verifier",
-    actions: [
-      { id: uid(), label: "Verify Documents", nextStateId: "pending_inspection", color: "success" },
-      { id: uid(), label: "Send Back", nextStateId: "pending_resubmission", color: "danger" },
-    ],
-    slaHours: 48,
-    notifications: [],
-    checklistEnabled: false,
-  },
-  {
-    id: "pending_inspection",
-    name: "Pending Inspection",
-    actor: "Field Inspector",
-    actions: [
-      { id: uid(), label: "Complete Inspection", nextStateId: "pending_approval", color: "success" },
-      { id: uid(), label: "Send Back", nextStateId: "pending_resubmission", color: "danger" },
-    ],
-    slaHours: 72,
-    notifications: [],
-    checklistEnabled: true,
-  },
-  {
-    id: "pending_resubmission",
-    name: "Pending Resubmission",
-    actor: "Citizen",
-    actions: [
-      { id: uid(), label: "Resubmit", nextStateId: "pending_doc_verification", color: "default" },
-    ],
-    slaHours: 0,
-    notifications: [],
-    checklistEnabled: false,
-  },
-  {
-    id: "pending_approval",
-    name: "Pending Approval",
-    actor: "Approver",
-    actions: [
-      { id: uid(), label: "Issue License", nextStateId: "pending_payment", color: "success" },
-      { id: uid(), label: "Reject", nextStateId: "rejected", color: "danger" },
-    ],
-    slaHours: 24,
-    notifications: [],
-    checklistEnabled: false,
-  },
-  {
-    id: "rejected",
-    name: "Rejected",
-    actor: "—",
-    actions: [],
-    slaHours: 0,
-    notifications: [],
-    checklistEnabled: false,
-    isEnd: true,
-  },
-  {
-    id: "pending_payment",
-    name: "Pending Payment",
-    actor: "Citizen",
-    actions: [
-      { id: uid(), label: "Pay License Fee", nextStateId: "pending_issuance", color: "success" },
-    ],
-    slaHours: 0,
-    notifications: [],
-    checklistEnabled: false,
-  },
-  {
-    id: "pending_issuance",
-    name: "Pending Issuance",
-    actor: "System",
-    actions: [
-      { id: uid(), label: "Issue License", nextStateId: "license_issued", color: "success" },
-    ],
-    slaHours: 4,
-    notifications: [],
-    checklistEnabled: false,
-  },
-  {
-    id: "license_issued",
-    name: "License Issued",
-    actor: "—",
-    actions: [],
-    slaHours: 0,
-    notifications: [],
-    checklistEnabled: false,
-    isEnd: true,
-  },
-];
+// ── Trade License pre-fill (8 rows, each = 1 stage with 1 action) ─────────────
+
+function makeDefaultRows(): WorkflowStage[] {
+  return [
+    {
+      id: uid(),
+      name: "Start",
+      actor: "Citizen",
+      actions: [{ id: uid(), label: "Apply", nextStateId: "Pending Document Verification", color: "default" }],
+      slaHours: 0,
+      notifications: [],
+      checklistEnabled: false,
+      isStart: true,
+    },
+    {
+      id: uid(),
+      name: "Start",
+      actor: "Counter Employee",
+      actions: [{ id: uid(), label: "Assisted Apply", nextStateId: "Pending Document Verification", color: "default" }],
+      slaHours: 0,
+      notifications: [],
+      checklistEnabled: false,
+      isStart: true,
+    },
+    {
+      id: uid(),
+      name: "Pending Document Verification",
+      actor: "Document Verifier",
+      actions: [{ id: uid(), label: "Approve Documents", nextStateId: "Pending Field Inspection", color: "success" }],
+      slaHours: 48,
+      notifications: [],
+      checklistEnabled: false,
+    },
+    {
+      id: uid(),
+      name: "Pending Document Verification",
+      actor: "Document Verifier",
+      actions: [{ id: uid(), label: "Send Back", nextStateId: "Start", color: "danger" }],
+      slaHours: 0,
+      notifications: [],
+      checklistEnabled: false,
+    },
+    {
+      id: uid(),
+      name: "Pending Field Inspection",
+      actor: "Field Inspector",
+      actions: [{ id: uid(), label: "Inspection Passed", nextStateId: "Pending Approval", color: "success" }],
+      slaHours: 72,
+      notifications: [],
+      checklistEnabled: true,
+    },
+    {
+      id: uid(),
+      name: "Pending Field Inspection",
+      actor: "Field Inspector",
+      actions: [{ id: uid(), label: "Inspection Failed", nextStateId: "Start", color: "danger" }],
+      slaHours: 0,
+      notifications: [],
+      checklistEnabled: false,
+    },
+    {
+      id: uid(),
+      name: "Pending Approval",
+      actor: "Approver",
+      actions: [{ id: uid(), label: "Approve", nextStateId: "License Issued", color: "success" }],
+      slaHours: 24,
+      notifications: [],
+      checklistEnabled: false,
+    },
+    {
+      id: uid(),
+      name: "Pending Approval",
+      actor: "Approver",
+      actions: [{ id: uid(), label: "Reject", nextStateId: "Start", color: "danger" }],
+      slaHours: 0,
+      notifications: [],
+      checklistEnabled: false,
+    },
+    {
+      id: uid(),
+      name: "License Issued",
+      actor: "System",
+      actions: [],
+      slaHours: 0,
+      notifications: [],
+      checklistEnabled: false,
+      isEnd: true,
+    },
+  ];
+}
 
 // ── Sub-component: Toggle ─────────────────────────────────────────────────────
 
@@ -128,46 +124,6 @@ function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: 
   );
 }
 
-// ── Sub-component: ActionColorPill ────────────────────────────────────────────
-
-function ActionPill({ action, stageName }: { action: WorkflowAction; stageName: string }) {
-  const cls =
-    action.color === "success" ? "bg-green-100 text-green-800 border border-green-200" :
-    action.color === "danger" ? "bg-red-100 text-red-800 border border-red-200" :
-    "bg-slate-100 text-slate-700 border border-slate-200";
-  return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${cls}`}>
-      {action.label}
-      <ArrowRight size={10} />
-      {stageName}
-    </span>
-  );
-}
-
-// ── Actor color helpers ───────────────────────────────────────────────────────
-
-function actorColor(actor: string, isEnd?: boolean): string {
-  if (isEnd) return "bg-slate-100 border-slate-300 text-slate-600";
-  const a = actor.toLowerCase();
-  if (a.includes("citizen")) return "bg-blue-50 border-blue-300 text-blue-800";
-  if (a.includes("document")) return "bg-purple-50 border-purple-300 text-purple-800";
-  if (a.includes("inspector")) return "bg-orange-50 border-orange-300 text-orange-800";
-  if (a.includes("approv")) return "bg-green-50 border-green-300 text-green-800";
-  if (a.includes("system")) return "bg-slate-50 border-slate-300 text-slate-700";
-  return "bg-white border-slate-300 text-slate-700";
-}
-
-function actorDot(actor: string, isEnd?: boolean): string {
-  if (isEnd) return "bg-slate-400";
-  const a = actor.toLowerCase();
-  if (a.includes("citizen")) return "bg-blue-400";
-  if (a.includes("document")) return "bg-purple-400";
-  if (a.includes("inspector")) return "bg-orange-400";
-  if (a.includes("approv")) return "bg-green-400";
-  if (a.includes("system")) return "bg-slate-400";
-  return "bg-slate-300";
-}
-
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -178,456 +134,548 @@ interface Props {
   onSaveDraft: () => Promise<void>;
 }
 
+// ── Panel State types ─────────────────────────────────────────────────────────
+
+type PanelTarget = { rowId: string; kind: "notifications" | "checklist" } | null;
+
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export default function StepWorkflow({ config, updateConfig, onNext, onBack, onSaveDraft }: Props) {
   const wf = config.workflow;
-  const stages = wf.stages.length > 0 ? wf.stages : DEFAULT_STAGES;
+  // Each table row is one WorkflowStage with exactly one action (or isEnd stage with zero)
+  const rows: WorkflowStage[] = wf.stages.length > 0 ? wf.stages : makeDefaultRows();
 
   function updateWf<K extends keyof WorkflowConfig>(key: K, value: WorkflowConfig[K]) {
     updateConfig("workflow", { ...wf, [key]: value });
   }
+  function setRows(s: WorkflowStage[]) { updateWf("stages", s); }
+  function setChecklistItems(c: WorkflowChecklistItem[]) { updateWf("checklistItems", c); }
 
-  function setStages(s: WorkflowStage[]) { updateWf("stages", s); }
-  function setChecklist(c: WorkflowChecklistItem[]) { updateWf("checklistItems", c); }
+  // Populate roles from config
+  const roleNames = config.roles.map(r => r.name);
 
-  // ── Edit / Add Stage State ──────────────────────────────────────────────────
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [addingStage, setAddingStage] = useState(false);
-  const [newStage, setNewStage] = useState({ name: "", actor: "", slaHours: 0 });
+  // ── Panel open/close state ─────────────────────────────────────────────────
+  const [openPanel, setOpenPanel] = useState<PanelTarget>(null);
+
+  // ── Advanced settings ─────────────────────────────────────────────────────
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
+  // ── Clear confirm ─────────────────────────────────────────────────────────
   const [clearConfirm, setClearConfirm] = useState(false);
-  const [globalSettingsOpen, setGlobalSettingsOpen] = useState(false);
 
-  // ── Add Checklist State ─────────────────────────────────────────────────────
-  const [addingChecklist, setAddingChecklist] = useState(false);
-  const [newChecklist, setNewChecklist] = useState<{
-    stageId: string; label: string;
-    fieldType: WorkflowChecklistItem["fieldType"]; required: boolean;
-  }>({ stageId: "", label: "", fieldType: "checkbox", required: true });
+  // Shared styles
+  const inputCls = "px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
+  const selectCls = inputCls;
 
-  // ── Stage lookup helpers ────────────────────────────────────────────────────
-  function stageById(id: string) { return stages.find(s => s.id === id); }
-  function stageNameById(id: string) { return stageById(id)?.name ?? id; }
-  const checklistEnabledStages = stages.filter(s => s.checklistEnabled);
+  // ── Row mutation helpers ───────────────────────────────────────────────────
 
-  // ── Stage mutation helpers ──────────────────────────────────────────────────
-  function updateStage(id: string, patch: Partial<WorkflowStage>) {
-    setStages(stages.map(s => s.id === id ? { ...s, ...patch } : s));
+  function updateRow(id: string, patch: Partial<WorkflowStage>) {
+    setRows(rows.map(r => r.id === id ? { ...r, ...patch } : r));
   }
 
-  function deleteStage(id: string) {
-    setStages(stages.filter(s => s.id !== id));
-    if (editingId === id) setEditingId(null);
+  function updateRowAction(rowId: string, actionPatch: Partial<WorkflowAction>) {
+    const row = rows.find(r => r.id === rowId);
+    if (!row || row.actions.length === 0) return;
+    const updatedAction = { ...row.actions[0], ...actionPatch };
+    updateRow(rowId, { actions: [updatedAction] });
   }
 
-  function addStage() {
-    if (!newStage.name.trim()) return;
-    const id = newStage.name.toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "") + "_" + uid();
-    const stage: WorkflowStage = {
-      id,
-      name: newStage.name.trim(),
-      actor: newStage.actor.trim() || "Staff",
-      actions: [],
-      slaHours: newStage.slaHours,
+  function deleteRow(id: string) {
+    setRows(rows.filter(r => r.id !== id));
+    if (openPanel?.rowId === id) setOpenPanel(null);
+  }
+
+  function addRow() {
+    const newRow: WorkflowStage = {
+      id: uid(),
+      name: "",
+      actor: roleNames[0] ?? "",
+      actions: [{ id: uid(), label: "", nextStateId: "", color: "default" }],
+      slaHours: 0,
       notifications: [],
       checklistEnabled: false,
     };
-    setStages([...stages, stage]);
-    setNewStage({ name: "", actor: "", slaHours: 0 });
-    setAddingStage(false);
+    setRows([...rows, newRow]);
   }
 
-  // ── Inline Edit for a Stage ─────────────────────────────────────────────────
-  const editingStage = editingId ? stages.find(s => s.id === editingId) : null;
+  // ── Notification helpers ───────────────────────────────────────────────────
 
-  function updateEditingAction(actionId: string, patch: Partial<WorkflowAction>) {
-    if (!editingStage) return;
-    updateStage(editingStage.id, {
-      actions: editingStage.actions.map(a => a.id === actionId ? { ...a, ...patch } : a),
-    });
-  }
-  function addAction() {
-    if (!editingStage) return;
-    const newAction: WorkflowAction = { id: uid(), label: "New Action", nextStateId: stages[0]?.id ?? "", color: "default" };
-    updateStage(editingStage.id, { actions: [...editingStage.actions, newAction] });
-  }
-  function deleteAction(actionId: string) {
-    if (!editingStage) return;
-    updateStage(editingStage.id, { actions: editingStage.actions.filter(a => a.id !== actionId) });
-  }
-
-  function updateEditingNotification(idx: number, patch: Partial<WorkflowNotification>) {
-    if (!editingStage) return;
-    const notifs = editingStage.notifications.map((n, i) => i === idx ? { ...n, ...patch } : n);
-    updateStage(editingStage.id, { notifications: notifs });
-  }
-  function addNotification() {
-    if (!editingStage) return;
+  function addNotification(rowId: string) {
+    const row = rows.find(r => r.id === rowId);
+    if (!row) return;
     const newNotif: WorkflowNotification = { channel: "email", recipient: "applicant", subject: "" };
-    updateStage(editingStage.id, { notifications: [...editingStage.notifications, newNotif] });
-  }
-  function deleteNotification(idx: number) {
-    if (!editingStage) return;
-    updateStage(editingStage.id, { notifications: editingStage.notifications.filter((_, i) => i !== idx) });
+    updateRow(rowId, { notifications: [...row.notifications, newNotif] });
   }
 
-  // ── Checklist helpers ───────────────────────────────────────────────────────
-  function deleteChecklistItem(id: string) {
-    setChecklist(wf.checklistItems.filter(c => c.id !== id));
-  }
-  function addChecklistItem() {
-    if (!newChecklist.label.trim() || !newChecklist.stageId) return;
-    const item: WorkflowChecklistItem = { id: uid(), ...newChecklist, label: newChecklist.label.trim() };
-    setChecklist([...wf.checklistItems, item]);
-    setNewChecklist({ stageId: "", label: "", fieldType: "checkbox", required: true });
-    setAddingChecklist(false);
+  function updateNotification(rowId: string, idx: number, patch: Partial<WorkflowNotification>) {
+    const row = rows.find(r => r.id === rowId);
+    if (!row) return;
+    const updated = row.notifications.map((n, i) => i === idx ? { ...n, ...patch } : n);
+    updateRow(rowId, { notifications: updated });
   }
 
-  // ── Flow diagram: main path (exclude rejected, pending_resubmission) ────────
-  const SIDE_STAGES = new Set(["rejected", "pending_resubmission"]);
-  const mainPathStages = stages.filter(s => !SIDE_STAGES.has(s.id));
-  const sendBackStages = stages.filter(s => {
-    return s.actions.some(a => a.nextStateId === "pending_resubmission");
-  });
+  function removeNotification(rowId: string, idx: number) {
+    const row = rows.find(r => r.id === rowId);
+    if (!row) return;
+    updateRow(rowId, { notifications: row.notifications.filter((_, i) => i !== idx) });
+  }
 
-  // ── Shared input classes ────────────────────────────────────────────────────
-  const inputCls = "px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
-  const selectCls = inputCls;
+  // ── Checklist helpers ──────────────────────────────────────────────────────
+
+  function addChecklistItem(rowId: string) {
+    const newItem: WorkflowChecklistItem = {
+      id: uid(),
+      stageId: rowId,
+      label: "",
+      fieldType: "checkbox",
+      required: true,
+    };
+    setChecklistItems([...wf.checklistItems, newItem]);
+  }
+
+  function updateChecklistItem(itemId: string, patch: Partial<WorkflowChecklistItem>) {
+    setChecklistItems(wf.checklistItems.map(c => c.id === itemId ? { ...c, ...patch } : c));
+  }
+
+  function removeChecklistItem(itemId: string) {
+    setChecklistItems(wf.checklistItems.filter(c => c.id !== itemId));
+  }
+
+  function checklistItemsForRow(rowId: string) {
+    return wf.checklistItems.filter(c => c.stageId === rowId);
+  }
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <StepWrapper
       step={9}
       title="Workflow"
-      subtitle="Configure how license applications move through approval stages."
+      subtitle="Define the state-based approval workflow. Each row is one transition: a role takes an action that moves the application from one state to the next."
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
     >
-      <div className="space-y-10">
+      <div className="space-y-8">
 
-        {/* ── PART 1: Stages table ─────────────────────────────────────────── */}
-        <section>
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h3 className="text-base font-semibold text-slate-800">Workflow Stages</h3>
-              <p className="text-xs text-slate-500 mt-0.5">Each stage represents a step in the application lifecycle.</p>
-            </div>
+        {/* ── Header toolbar ─────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-slate-800">State Transition Table</h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Each row = one state → action → next state transition.
+            </p>
+          </div>
+          <button
+            onClick={() => setClearConfirm(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs hover:bg-red-50 transition-colors"
+          >
+            <RotateCcw size={12} />
+            Reset to example
+          </button>
+        </div>
+
+        {/* ── Clear confirm banner ───────────────────────────────────────── */}
+        {clearConfirm && (
+          <div className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+            <p className="text-sm text-red-700 flex-1">
+              Reset to the Trade License example? This will replace all current rows.
+            </p>
             <button
-              onClick={() => { setClearConfirm(false); setClearConfirm(true); }}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-red-200 text-red-600 text-xs hover:bg-red-50 transition-colors"
+              onClick={() => {
+                setRows(makeDefaultRows());
+                setChecklistItems([]);
+                setOpenPanel(null);
+                setClearConfirm(false);
+              }}
+              className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700"
             >
-              <RotateCcw size={12} />
-              Clear all
+              Yes, reset
+            </button>
+            <button
+              onClick={() => setClearConfirm(false)}
+              className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs hover:bg-slate-50"
+            >
+              Cancel
             </button>
           </div>
+        )}
 
-          {clearConfirm && (
-            <div className="mb-3 flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-              <p className="text-sm text-red-700 flex-1">Remove all stages and start from scratch?</p>
-              <button
-                onClick={() => { setStages([]); setChecklist([]); setClearConfirm(false); setEditingId(null); }}
-                className="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700"
-              >
-                Yes, clear
-              </button>
-              <button
-                onClick={() => setClearConfirm(false)}
-                className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-            </div>
-          )}
+        {/* ── Transition table ───────────────────────────────────────────── */}
+        <div className="rounded-xl border border-slate-200 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">From State</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Role</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Action</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">To State</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-32">Notifications</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-28">Checklist</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-12"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const action = row.actions[0];
+                  const notifCount = row.notifications.length;
+                  const checkCount = checklistItemsForRow(row.id).length;
+                  const isNotifOpen = openPanel?.rowId === row.id && openPanel.kind === "notifications";
+                  const isCheckOpen = openPanel?.rowId === row.id && openPanel.kind === "checklist";
+                  const isEndRow = !!row.isEnd;
 
-          <div className="rounded-xl border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200">
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-8">#</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Stage Name</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Performed By</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Actions → Next Stage</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-24">SLA (hrs)</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-28">Notifications</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-20">Checklist</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-20">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {stages.map((stage, idx) => (
+                  return (
                     <>
+                      {/* ── Main row ─────────────────────────────────────── */}
                       <tr
-                        key={stage.id}
-                        className={`border-b border-slate-100 transition-colors ${editingId === stage.id ? "bg-blue-50" : "hover:bg-slate-50"}`}
+                        key={row.id}
+                        className={`border-b border-slate-100 transition-colors ${
+                          isNotifOpen || isCheckOpen
+                            ? "bg-blue-50"
+                            : "hover:bg-slate-50"
+                        }`}
                       >
-                        {/* # */}
-                        <td className="px-4 py-3 text-xs text-slate-400 font-mono">{idx + 1}</td>
+                        {/* From State */}
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={row.name}
+                              onChange={e => updateRow(row.id, { name: e.target.value })}
+                              placeholder="e.g. Start"
+                              className="w-full min-w-[130px] text-sm text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-400 focus:outline-none py-0.5 transition-colors"
+                            />
+                            {row.isStart && (
+                              <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-100 text-blue-600">start</span>
+                            )}
+                          </div>
+                        </td>
 
-                        {/* Stage Name — inline editable */}
-                        <td className="px-4 py-3">
-                          <input
-                            type="text"
-                            value={stage.name}
-                            onChange={e => updateStage(stage.id, { name: e.target.value })}
-                            className="w-full text-sm text-slate-800 font-medium bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-400 focus:outline-none py-0.5 transition-colors"
-                          />
-                          {(stage.isStart || stage.isEnd) && (
-                            <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${stage.isStart ? "bg-blue-100 text-blue-600" : "bg-slate-100 text-slate-500"}`}>
-                              {stage.isStart ? "start" : "end"}
-                            </span>
+                        {/* Role */}
+                        <td className="px-4 py-2.5">
+                          {roleNames.length > 0 ? (
+                            <select
+                              value={row.actor}
+                              onChange={e => updateRow(row.id, { actor: e.target.value })}
+                              className={`${selectCls} w-full min-w-[140px]`}
+                            >
+                              {roleNames.map(name => (
+                                <option key={name} value={name}>{name}</option>
+                              ))}
+                              <option value={row.actor}>{row.actor}</option>
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              value={row.actor}
+                              onChange={e => updateRow(row.id, { actor: e.target.value })}
+                              placeholder="e.g. Approver"
+                              className="w-full min-w-[130px] text-sm text-slate-700 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-400 focus:outline-none py-0.5 transition-colors"
+                            />
                           )}
                         </td>
 
-                        {/* Actor — inline editable */}
-                        <td className="px-4 py-3">
-                          <input
-                            type="text"
-                            value={stage.actor}
-                            onChange={e => updateStage(stage.id, { actor: e.target.value })}
-                            className="w-full text-sm text-slate-600 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-400 focus:outline-none py-0.5 transition-colors"
-                          />
+                        {/* Action */}
+                        <td className="px-4 py-2.5">
+                          {isEndRow ? (
+                            <span className="text-xs text-slate-400 italic">—</span>
+                          ) : (
+                            <input
+                              type="text"
+                              value={action?.label ?? ""}
+                              onChange={e => updateRowAction(row.id, { label: e.target.value })}
+                              placeholder="e.g. Approve"
+                              className="w-full min-w-[120px] text-sm text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-400 focus:outline-none py-0.5 transition-colors"
+                            />
+                          )}
                         </td>
 
-                        {/* Actions → Next Stage */}
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {stage.actions.length === 0 ? (
-                              <span className="text-xs text-slate-400 italic">—</span>
-                            ) : (
-                              stage.actions.map(action => (
-                                <ActionPill key={action.id} action={action} stageName={stageNameById(action.nextStateId)} />
-                              ))
-                            )}
-                          </div>
+                        {/* To State */}
+                        <td className="px-4 py-2.5">
+                          {isEndRow ? (
+                            <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium border border-slate-200">
+                              (End)
+                            </span>
+                          ) : (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="text"
+                                value={action?.nextStateId ?? ""}
+                                onChange={e => updateRowAction(row.id, { nextStateId: e.target.value })}
+                                placeholder="e.g. Pending Approval"
+                                className="w-full min-w-[130px] text-sm text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-400 focus:outline-none py-0.5 transition-colors"
+                              />
+                              {action?.nextStateId === "End" && (
+                                <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-slate-100 text-slate-500 border border-slate-200">(End)</span>
+                              )}
+                            </div>
+                          )}
                         </td>
 
-                        {/* SLA */}
-                        <td className="px-4 py-3">
-                          <input
-                            type="number"
-                            min={0}
-                            value={stage.slaHours}
-                            onChange={e => updateStage(stage.id, { slaHours: Math.max(0, parseInt(e.target.value) || 0) })}
-                            className="w-16 px-2 py-1 rounded border border-slate-200 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                        </td>
-
-                        {/* Notifications */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-1.5">
-                            {stage.notifications.some(n => n.channel === "email") && (
-                              <span title="Email" className="text-blue-500"><Mail size={13} /></span>
-                            )}
-                            {stage.notifications.some(n => n.channel === "sms") && (
-                              <span title="SMS" className="text-purple-500"><MessageSquare size={13} /></span>
-                            )}
-                            {stage.notifications.some(n => n.channel === "push") && (
-                              <span title="Push" className="text-orange-500"><Bell size={13} /></span>
-                            )}
-                            {stage.notifications.length > 0 && (
-                              <span className="text-xs text-slate-400">×{stage.notifications.length}</span>
-                            )}
-                            {stage.notifications.length === 0 && (
-                              <span className="text-xs text-slate-300">—</span>
-                            )}
-                          </div>
-                        </td>
-
-                        {/* Checklist toggle */}
-                        <td className="px-4 py-3">
-                          <Toggle
-                            checked={stage.checklistEnabled}
-                            onChange={v => updateStage(stage.id, { checklistEnabled: v })}
-                          />
-                        </td>
-
-                        {/* Edit / Delete */}
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => setEditingId(editingId === stage.id ? null : stage.id)}
-                              className={`p-1.5 rounded-lg transition-colors ${editingId === stage.id ? "bg-blue-100 text-blue-600" : "text-slate-400 hover:text-blue-600 hover:bg-blue-50"}`}
-                              title="Edit stage"
-                            >
-                              {editingId === stage.id ? <ChevronUp size={14} /> : <Edit2 size={14} />}
-                            </button>
-                            {stage.isStart || stage.isEnd ? (
-                              <span title="Cannot delete start/end stages" className="p-1.5 text-slate-300">
-                                <Lock size={14} />
+                        {/* Notifications badge + button */}
+                        <td className="px-4 py-2.5 text-center">
+                          <button
+                            onClick={() => setOpenPanel(isNotifOpen ? null : { rowId: row.id, kind: "notifications" })}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                              isNotifOpen
+                                ? "bg-blue-600 text-white border-blue-600"
+                                : notifCount > 0
+                                ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                                : "bg-white text-slate-500 border-slate-200 hover:border-blue-300 hover:text-blue-600"
+                            }`}
+                          >
+                            <Bell size={11} />
+                            {notifCount > 0 ? (
+                              <span className={`px-1 py-0 rounded-full text-[10px] font-bold ${isNotifOpen ? "bg-white text-blue-700" : "bg-blue-600 text-white"}`}>
+                                {notifCount}
                               </span>
-                            ) : (
-                              <button
-                                onClick={() => deleteStage(stage.id)}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                                title="Delete stage"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
+                            ) : null}
+                            {notifCount === 0 ? "Add" : "Edit"}
+                          </button>
+                        </td>
+
+                        {/* Checklist badge + button */}
+                        <td className="px-4 py-2.5 text-center">
+                          <button
+                            onClick={() => setOpenPanel(isCheckOpen ? null : { rowId: row.id, kind: "checklist" })}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                              isCheckOpen
+                                ? "bg-orange-600 text-white border-orange-600"
+                                : checkCount > 0
+                                ? "bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100"
+                                : "bg-white text-slate-500 border-slate-200 hover:border-orange-300 hover:text-orange-600"
+                            }`}
+                          >
+                            <CheckSquare size={11} />
+                            {checkCount > 0 ? (
+                              <span className={`px-1 py-0 rounded-full text-[10px] font-bold ${isCheckOpen ? "bg-white text-orange-700" : "bg-orange-600 text-white"}`}>
+                                {checkCount}
+                              </span>
+                            ) : null}
+                            {checkCount === 0 ? "Add" : "Edit"}
+                          </button>
+                        </td>
+
+                        {/* Delete */}
+                        <td className="px-2 py-2.5 text-center">
+                          <button
+                            onClick={() => deleteRow(row.id)}
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                            title="Delete row"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </td>
                       </tr>
 
-                      {/* ── PART 3: Inline Edit Panel ──────────────────────── */}
-                      {editingId === stage.id && editingStage && (
-                        <tr key={`edit-${stage.id}`} className="bg-blue-50 border-b border-slate-200">
-                          <td colSpan={8} className="px-4 py-5">
-                            <div className="bg-white rounded-xl border border-blue-200 p-5 space-y-5">
-                              <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
-                                <Edit2 size={14} className="text-blue-500" />
-                                Edit: {editingStage.name}
-                              </h4>
-
-                              {/* Basic fields */}
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                                <div>
-                                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Stage Name</label>
-                                  <input
-                                    type="text"
-                                    value={editingStage.name}
-                                    onChange={e => updateStage(editingStage.id, { name: e.target.value })}
-                                    className={`w-full ${inputCls}`}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-slate-600 mb-1.5">Performed By (Actor)</label>
-                                  <input
-                                    type="text"
-                                    value={editingStage.actor}
-                                    onChange={e => updateStage(editingStage.id, { actor: e.target.value })}
-                                    className={`w-full ${inputCls}`}
-                                  />
-                                </div>
-                                <div>
-                                  <label className="block text-xs font-medium text-slate-600 mb-1.5">SLA (hours, 0 = none)</label>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    value={editingStage.slaHours}
-                                    onChange={e => updateStage(editingStage.id, { slaHours: Math.max(0, parseInt(e.target.value) || 0) })}
-                                    className={`w-full ${inputCls}`}
-                                  />
-                                </div>
-                              </div>
-
-                              <div>
-                                <Toggle
-                                  checked={editingStage.checklistEnabled}
-                                  onChange={v => updateStage(editingStage.id, { checklistEnabled: v })}
-                                  label="Checklist enabled for this stage"
-                                />
-                              </div>
-
-                              {/* Actions */}
-                              <div>
-                                <div className="flex items-center justify-between mb-2">
-                                  <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Actions</label>
-                                  <button onClick={addAction} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700">
-                                    <Plus size={12} /> Add Action
-                                  </button>
-                                </div>
-                                {editingStage.actions.length === 0 ? (
-                                  <p className="text-xs text-slate-400 italic">No actions — add one below.</p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {editingStage.actions.map(action => (
-                                      <div key={action.id} className="flex items-center gap-2 flex-wrap">
-                                        <input
-                                          type="text"
-                                          value={action.label}
-                                          onChange={e => updateEditingAction(action.id, { label: e.target.value })}
-                                          placeholder="Action label"
-                                          className={`flex-1 min-w-0 ${inputCls}`}
-                                        />
-                                        <select
-                                          value={action.nextStateId}
-                                          onChange={e => updateEditingAction(action.id, { nextStateId: e.target.value })}
-                                          className={selectCls}
-                                        >
-                                          {stages.filter(s => s.id !== editingStage.id).map(s => (
-                                            <option key={s.id} value={s.id}>{s.name}</option>
-                                          ))}
-                                        </select>
-                                        <select
-                                          value={action.color}
-                                          onChange={e => updateEditingAction(action.id, { color: e.target.value as WorkflowAction["color"] })}
-                                          className={selectCls}
-                                        >
-                                          <option value="default">Grey</option>
-                                          <option value="success">Green</option>
-                                          <option value="danger">Red</option>
-                                        </select>
-                                        <button onClick={() => deleteAction(action.id)} className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
-                                          <Trash2 size={13} />
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Notifications */}
-                              <div>
-                                <div className="flex items-center justify-between mb-2">
-                                  <label className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Notifications</label>
-                                  <button onClick={addNotification} className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700">
-                                    <Plus size={12} /> Add Notification
-                                  </button>
-                                </div>
-                                {editingStage.notifications.length === 0 ? (
-                                  <p className="text-xs text-slate-400 italic">No notifications configured.</p>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {editingStage.notifications.map((notif, nIdx) => (
-                                      <div key={nIdx} className="flex items-center gap-2 flex-wrap">
-                                        <select
-                                          value={notif.channel}
-                                          onChange={e => updateEditingNotification(nIdx, { channel: e.target.value as WorkflowNotification["channel"] })}
-                                          className={selectCls}
-                                        >
-                                          <option value="email">Email</option>
-                                          <option value="sms">SMS</option>
-                                          <option value="push">Push</option>
-                                        </select>
-                                        <select
-                                          value={notif.recipient}
-                                          onChange={e => updateEditingNotification(nIdx, { recipient: e.target.value as WorkflowNotification["recipient"] })}
-                                          className={selectCls}
-                                        >
-                                          <option value="applicant">Applicant</option>
-                                          <option value="staff">Staff</option>
-                                          <option value="both">Both</option>
-                                        </select>
-                                        <input
-                                          type="text"
-                                          value={notif.subject}
-                                          onChange={e => updateEditingNotification(nIdx, { subject: e.target.value })}
-                                          placeholder="Subject / message template"
-                                          className={`flex-1 min-w-0 ${inputCls}`}
-                                        />
-                                        <button onClick={() => deleteNotification(nIdx)} className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors">
-                                          <Trash2 size={13} />
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-
-                              {/* Save / Cancel */}
-                              <div className="flex gap-3 pt-1">
+                      {/* ── Notifications panel ───────────────────────────── */}
+                      {isNotifOpen && (
+                        <tr key={`notif-${row.id}`} className="bg-blue-50 border-b border-slate-200">
+                          <td colSpan={7} className="px-6 py-4">
+                            <div className="bg-white rounded-xl border border-blue-200 p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                                  <Bell size={14} className="text-blue-500" />
+                                  Notifications — {row.name || "this state"} / {action?.label || "this action"}
+                                </h4>
                                 <button
-                                  onClick={() => setEditingId(null)}
-                                  className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 transition-colors"
+                                  onClick={() => addNotification(row.id)}
+                                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                                >
+                                  <Plus size={12} /> Add notification
+                                </button>
+                              </div>
+
+                              {row.notifications.length === 0 ? (
+                                <p className="text-xs text-slate-400 italic">No notifications yet. Click "Add notification" to create one.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {row.notifications.map((notif, nIdx) => (
+                                    <div key={nIdx} className="flex items-center gap-2 flex-wrap bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                                      {/* Channel multi-checkboxes */}
+                                      <div className="flex items-center gap-3 shrink-0">
+                                        {(["email", "sms", "push"] as const).map(ch => (
+                                          <label key={ch} className="flex items-center gap-1 cursor-pointer text-xs text-slate-600">
+                                            <input
+                                              type="checkbox"
+                                              checked={notif.channel === ch}
+                                              onChange={() => updateNotification(row.id, nIdx, { channel: ch })}
+                                              className="rounded"
+                                            />
+                                            {ch === "email" && <Mail size={11} className="text-blue-500" />}
+                                            {ch === "sms" && <MessageSquare size={11} className="text-purple-500" />}
+                                            {ch === "push" && <Bell size={11} className="text-orange-500" />}
+                                            <span className="capitalize">{ch}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+
+                                      {/* Recipient radio */}
+                                      <div className="flex items-center gap-3 shrink-0">
+                                        {(["applicant", "staff", "both"] as const).map(rec => (
+                                          <label key={rec} className="flex items-center gap-1 cursor-pointer text-xs text-slate-600">
+                                            <input
+                                              type="radio"
+                                              name={`recipient-${row.id}-${nIdx}`}
+                                              checked={notif.recipient === rec}
+                                              onChange={() => updateNotification(row.id, nIdx, { recipient: rec })}
+                                            />
+                                            <span className="capitalize">{rec}</span>
+                                          </label>
+                                        ))}
+                                      </div>
+
+                                      {/* Subject */}
+                                      <input
+                                        type="text"
+                                        value={notif.subject}
+                                        onChange={e => updateNotification(row.id, nIdx, { subject: e.target.value })}
+                                        placeholder="Subject / message template"
+                                        className={`flex-1 min-w-0 ${inputCls}`}
+                                      />
+
+                                      {/* Remove */}
+                                      <button
+                                        onClick={() => removeNotification(row.id, nIdx)}
+                                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Existing notification chips */}
+                              {row.notifications.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {row.notifications.map((n, i) => (
+                                    <span
+                                      key={i}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium border border-blue-200"
+                                    >
+                                      {n.channel === "email" && <Mail size={10} />}
+                                      {n.channel === "sms" && <MessageSquare size={10} />}
+                                      {n.channel === "push" && <Bell size={10} />}
+                                      {n.channel} → {n.recipient}
+                                      {n.subject ? `: ${n.subject.slice(0, 20)}${n.subject.length > 20 ? "…" : ""}` : ""}
+                                      <button
+                                        onClick={() => removeNotification(row.id, i)}
+                                        className="ml-0.5 hover:text-red-600"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div className="flex justify-end pt-1">
+                                <button
+                                  onClick={() => setOpenPanel(null)}
+                                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
                                 >
                                   Done
                                 </button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+
+                      {/* ── Checklist panel ───────────────────────────────── */}
+                      {isCheckOpen && (
+                        <tr key={`check-${row.id}`} className="bg-orange-50 border-b border-slate-200">
+                          <td colSpan={7} className="px-6 py-4">
+                            <div className="bg-white rounded-xl border border-orange-200 p-4 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
+                                  <CheckSquare size={14} className="text-orange-500" />
+                                  Checklist — {row.name || "this state"} / {action?.label || "this action"}
+                                </h4>
                                 <button
-                                  onClick={() => setEditingId(null)}
-                                  className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm hover:bg-slate-50 transition-colors"
+                                  onClick={() => addChecklistItem(row.id)}
+                                  className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium"
                                 >
-                                  Close
+                                  <Plus size={12} /> Add item
+                                </button>
+                              </div>
+
+                              {checklistItemsForRow(row.id).length === 0 ? (
+                                <p className="text-xs text-slate-400 italic">No checklist items yet. Click "Add item" to create one.</p>
+                              ) : (
+                                <div className="space-y-2">
+                                  {checklistItemsForRow(row.id).map(item => (
+                                    <div key={item.id} className="flex items-center gap-2 flex-wrap bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                                      {/* Label */}
+                                      <input
+                                        type="text"
+                                        value={item.label}
+                                        onChange={e => updateChecklistItem(item.id, { label: e.target.value })}
+                                        placeholder="e.g. Verify fire exits"
+                                        className={`flex-1 min-w-0 ${inputCls}`}
+                                      />
+
+                                      {/* Field type */}
+                                      <select
+                                        value={item.fieldType}
+                                        onChange={e => updateChecklistItem(item.id, { fieldType: e.target.value as WorkflowChecklistItem["fieldType"] })}
+                                        className={`${selectCls} w-28 shrink-0`}
+                                      >
+                                        <option value="checkbox">Checkbox</option>
+                                        <option value="text">Text</option>
+                                        <option value="file">File</option>
+                                      </select>
+
+                                      {/* Required toggle */}
+                                      <Toggle
+                                        checked={item.required}
+                                        onChange={v => updateChecklistItem(item.id, { required: v })}
+                                        label="Required"
+                                      />
+
+                                      {/* Remove */}
+                                      <button
+                                        onClick={() => removeChecklistItem(item.id)}
+                                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Existing items as chips */}
+                              {checklistItemsForRow(row.id).length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                  {checklistItemsForRow(row.id).map(item => (
+                                    <span
+                                      key={item.id}
+                                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-medium border border-orange-200"
+                                    >
+                                      <CheckSquare size={10} />
+                                      {item.label || "(empty)"}
+                                      <span className="opacity-60 capitalize">[{item.fieldType}]</span>
+                                      {item.required && <span className="text-red-500 font-bold">*</span>}
+                                      <button
+                                        onClick={() => removeChecklistItem(item.id)}
+                                        className="ml-0.5 hover:text-red-600"
+                                      >
+                                        ×
+                                      </button>
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
+                              <div className="flex justify-end pt-1">
+                                <button
+                                  onClick={() => setOpenPanel(null)}
+                                  className="px-3 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-semibold hover:bg-orange-700 transition-colors"
+                                >
+                                  Done
                                 </button>
                               </div>
                             </div>
@@ -635,309 +683,37 @@ export default function StepWorkflow({ config, updateConfig, onNext, onBack, onS
                         </tr>
                       )}
                     </>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* ── PART 4: Add Stage ─────────────────────────────────────────── */}
-            {addingStage ? (
-              <div className="border-t border-slate-200 bg-slate-50 px-4 py-4">
-                <p className="text-xs font-semibold text-slate-600 mb-3">New Stage</p>
-                <div className="flex flex-wrap items-end gap-3">
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Stage Name *</label>
-                    <input
-                      type="text"
-                      value={newStage.name}
-                      onChange={e => setNewStage(s => ({ ...s, name: e.target.value }))}
-                      placeholder="e.g. Pending Site Inspection"
-                      className={`${inputCls} w-52`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">Actor / Role</label>
-                    <input
-                      type="text"
-                      value={newStage.actor}
-                      onChange={e => setNewStage(s => ({ ...s, actor: e.target.value }))}
-                      placeholder="e.g. Field Inspector"
-                      className={`${inputCls} w-44`}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs text-slate-500 mb-1">SLA (hours)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={newStage.slaHours}
-                      onChange={e => setNewStage(s => ({ ...s, slaHours: Math.max(0, parseInt(e.target.value) || 0) }))}
-                      className={`${inputCls} w-24`}
-                    />
-                  </div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={addStage}
-                      disabled={!newStage.name.trim()}
-                      className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                    >
-                      Add
-                    </button>
-                    <button
-                      onClick={() => { setAddingStage(false); setNewStage({ name: "", actor: "", slaHours: 0 }); }}
-                      className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm hover:bg-slate-50 transition-colors"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="border-t border-slate-200 px-4 py-3">
-                <button
-                  onClick={() => setAddingStage(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-slate-300 text-slate-500 text-sm hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all w-full justify-center"
-                >
-                  <Plus size={14} />
-                  Add Stage
-                </button>
-              </div>
-            )}
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        </section>
 
-        {/* ── PART 2: Visual Flow Diagram ──────────────────────────────────── */}
-        {stages.length > 0 && (
-          <section>
-            <h3 className="text-base font-semibold text-slate-800 mb-1">Flow Diagram</h3>
-            <p className="text-xs text-slate-500 mb-4">Main application path (branch states shown separately).</p>
+          {/* ── Add row button ──────────────────────────────────────────── */}
+          <div className="border-t border-slate-200 px-4 py-3">
+            <button
+              onClick={addRow}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-slate-300 text-slate-500 text-sm hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-all w-full justify-center"
+            >
+              <Plus size={14} />
+              Add Transition
+            </button>
+          </div>
+        </div>
 
-            {/* Legend */}
-            <div className="flex flex-wrap gap-3 mb-4">
-              {[
-                { label: "Citizen", cls: "bg-blue-50 border-blue-300 text-blue-700" },
-                { label: "Document Verifier", cls: "bg-purple-50 border-purple-300 text-purple-700" },
-                { label: "Field Inspector", cls: "bg-orange-50 border-orange-300 text-orange-700" },
-                { label: "Approver", cls: "bg-green-50 border-green-300 text-green-700" },
-                { label: "System", cls: "bg-slate-50 border-slate-300 text-slate-600" },
-                { label: "End State", cls: "bg-slate-100 border-slate-300 text-slate-500" },
-              ].map(({ label, cls }) => (
-                <span key={label} className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border ${cls}`}>
-                  <span className={`w-2 h-2 rounded-full ${actorDot(label, label === "End State")}`} />
-                  {label}
-                </span>
-              ))}
-            </div>
-
-            {/* Main path */}
-            <div className="overflow-x-auto pb-2">
-              <div className="flex items-start gap-0 min-w-max">
-                {mainPathStages.map((stage, idx) => (
-                  <div key={stage.id} className="flex items-center">
-                    {/* Stage box */}
-                    <div className={`relative flex flex-col items-center`}>
-                      <div className={`
-                        w-32 rounded-xl border-2 px-3 py-3 text-center transition-shadow
-                        ${stage.isEnd && stage.id === "license_issued" ? "border-green-400 bg-green-50" : ""}
-                        ${stage.isEnd && stage.id === "rejected" ? "border-red-400 bg-red-50" : ""}
-                        ${!stage.isEnd ? actorColor(stage.actor) : ""}
-                      `}>
-                        <p className="text-xs font-semibold leading-snug text-slate-800 line-clamp-2">{stage.name}</p>
-                        <p className="text-[10px] mt-1 opacity-70 text-slate-600">{stage.actor}</p>
-                        {stage.isEnd && (
-                          <span className={`text-[10px] font-semibold mt-1 block ${stage.id === "license_issued" ? "text-green-600" : "text-red-500"}`}>
-                            {stage.id === "license_issued" ? "✓ Issued" : "✗ End"}
-                          </span>
-                        )}
-                        {stage.slaHours > 0 && (
-                          <span className="text-[10px] text-slate-400 mt-1 block">{stage.slaHours}h SLA</span>
-                        )}
-                        {stage.checklistEnabled && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] text-orange-600 mt-1">
-                            <CheckSquare size={9} /> Checklist
-                          </span>
-                        )}
-                      </div>
-                      {/* Send Back indicator */}
-                      {sendBackStages.some(s => s.id === stage.id) && (
-                        <div className="mt-1.5 text-[10px] text-red-400 italic flex items-center gap-0.5">
-                          <RotateCcw size={9} /> Send Back
-                        </div>
-                      )}
-                    </div>
-                    {/* Arrow (not after last) */}
-                    {idx < mainPathStages.length - 1 && (
-                      <div className="flex items-center px-1 text-slate-300 shrink-0">
-                        <ArrowRight size={16} />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Side branches */}
-            {(stages.some(s => s.id === "rejected") || stages.some(s => s.id === "pending_resubmission")) && (
-              <div className="mt-4 flex flex-wrap gap-3">
-                {stages.filter(s => SIDE_STAGES.has(s.id)).map(stage => (
-                  <div key={stage.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl border-2 text-xs ${stage.id === "rejected" ? "border-red-300 bg-red-50 text-red-700" : "border-amber-200 bg-amber-50 text-amber-700"}`}>
-                    <RotateCcw size={11} />
-                    <span className="font-medium">{stage.name}</span>
-                    <span className="opacity-60">({stage.actor})</span>
-                  </div>
-                ))}
-                <p className="text-xs text-slate-400 self-center">← Branch states (not on main path)</p>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* ── PART 5: Checklist Items ──────────────────────────────────────── */}
-        {checklistEnabledStages.length > 0 && (
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                  <CheckSquare size={16} className="text-orange-500" />
-                  Inspection Checklist
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">Items that field staff must complete during checklist-enabled stages.</p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 overflow-hidden">
-              {wf.checklistItems.length > 0 ? (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Stage</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">Item</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-28">Field Type</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-20">Required</th>
-                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide w-16"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {wf.checklistItems.map(item => (
-                      <tr key={item.id} className="border-b border-slate-100 hover:bg-slate-50">
-                        <td className="px-4 py-3 text-xs text-slate-600">{stageNameById(item.stageId)}</td>
-                        <td className="px-4 py-3 text-sm text-slate-800">{item.label}</td>
-                        <td className="px-4 py-3">
-                          <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full capitalize">{item.fieldType}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${item.required ? "bg-red-100 text-red-600" : "bg-slate-100 text-slate-500"}`}>
-                            {item.required ? "Yes" : "No"}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button
-                            onClick={() => deleteChecklistItem(item.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <div className="px-4 py-6 text-center text-slate-400 text-sm">No checklist items yet.</div>
-              )}
-
-              {/* Add checklist item */}
-              {addingChecklist ? (
-                <div className="border-t border-slate-200 bg-slate-50 px-4 py-4">
-                  <p className="text-xs font-semibold text-slate-600 mb-3">New Checklist Item</p>
-                  <div className="flex flex-wrap items-end gap-3">
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Stage *</label>
-                      <select
-                        value={newChecklist.stageId}
-                        onChange={e => setNewChecklist(c => ({ ...c, stageId: e.target.value }))}
-                        className={`${selectCls} w-48`}
-                      >
-                        <option value="">Select stage…</option>
-                        {checklistEnabledStages.map(s => (
-                          <option key={s.id} value={s.id}>{s.name}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Item Label *</label>
-                      <input
-                        type="text"
-                        value={newChecklist.label}
-                        onChange={e => setNewChecklist(c => ({ ...c, label: e.target.value }))}
-                        placeholder="e.g. Verify fire exits"
-                        className={`${inputCls} w-52`}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-slate-500 mb-1">Field Type</label>
-                      <select
-                        value={newChecklist.fieldType}
-                        onChange={e => setNewChecklist(c => ({ ...c, fieldType: e.target.value as WorkflowChecklistItem["fieldType"] }))}
-                        className={`${selectCls} w-32`}
-                      >
-                        <option value="checkbox">Checkbox</option>
-                        <option value="radio">Radio</option>
-                        <option value="text">Text</option>
-                        <option value="file">File</option>
-                      </select>
-                    </div>
-                    <div className="flex items-end pb-0.5">
-                      <Toggle
-                        checked={newChecklist.required}
-                        onChange={v => setNewChecklist(c => ({ ...c, required: v }))}
-                        label="Required"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={addChecklistItem}
-                        disabled={!newChecklist.label.trim() || !newChecklist.stageId}
-                        className="px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      >
-                        Add
-                      </button>
-                      <button
-                        onClick={() => { setAddingChecklist(false); setNewChecklist({ stageId: "", label: "", fieldType: "checkbox", required: true }); }}
-                        className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 text-sm hover:bg-slate-50 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="border-t border-slate-200 px-4 py-3">
-                  <button
-                    onClick={() => setAddingChecklist(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-slate-300 text-slate-500 text-sm hover:border-orange-400 hover:text-orange-600 hover:bg-orange-50 transition-all w-full justify-center"
-                  >
-                    <Plus size={14} />
-                    Add Checklist Item
-                  </button>
-                </div>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* ── PART 6: Global Workflow Settings (collapsible) ───────────────── */}
+        {/* ── Advanced Settings (collapsible) ─────────────────────────────── */}
         <section>
           <button
-            onClick={() => setGlobalSettingsOpen(o => !o)}
+            onClick={() => setAdvancedOpen(o => !o)}
             className="flex items-center gap-2 w-full text-left"
           >
-            <h3 className="text-base font-semibold text-slate-800 flex-1">Global Workflow Settings</h3>
-            {globalSettingsOpen ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
+            <h3 className="text-base font-semibold text-slate-800 flex-1">Advanced Settings</h3>
+            {advancedOpen ? <ChevronUp size={16} className="text-slate-500" /> : <ChevronDown size={16} className="text-slate-500" />}
           </button>
 
-          {globalSettingsOpen && (
+          {advancedOpen && (
             <div className="mt-4 bg-slate-50 rounded-xl border border-slate-200 p-5 space-y-5">
+
               {/* Processing SLA */}
               <div className="flex items-center justify-between">
                 <div>
@@ -1002,6 +778,7 @@ export default function StepWorkflow({ config, updateConfig, onNext, onBack, onS
                 </div>
                 <Toggle checked={wf.allowCitizenWithdrawal} onChange={v => updateWf("allowCitizenWithdrawal", v)} />
               </div>
+
             </div>
           )}
         </section>
