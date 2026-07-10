@@ -175,9 +175,6 @@ export default function Step2Branding({ config, updateConfig, onNext, onBack, on
 
                 {/* Hero */}
                 <div className="bg-gradient-to-br from-blue-700 to-blue-900 px-6 py-10 text-center">
-                  <p className="text-blue-200 text-xs font-medium uppercase tracking-widest mb-2">
-                    {config.account.departmentName || "Department of Business & Trade"}
-                  </p>
                   <h1 className="text-white text-xl font-bold leading-snug">{portalName}</h1>
                   <p className="text-blue-200 text-xs mt-2 max-w-xs mx-auto leading-relaxed">{tagline}</p>
                   <div className="mt-5 flex items-center justify-center gap-3">

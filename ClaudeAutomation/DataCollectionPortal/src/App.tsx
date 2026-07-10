@@ -2,6 +2,10 @@ import { useState, useEffect, useCallback } from "react";
 import type { ImplementationConfig } from "./types";
 import { DEFAULT_CONFIG, STORAGE_KEY, STEP_KEY } from "./defaults";
 import { saveConfig, type AccountRecord } from "./lib/supabase";
+
+// Persists which steps have been completed (user clicked Next/Save past them)
+const COMPLETED_STEPS_KEY = "blp_completed_steps";
+
 import LoginPage from "./pages/LoginPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import AccountHome from "./pages/AccountHome";
@@ -18,65 +22,95 @@ import StepUsers from "./steps/StepUsers";
 import Step7PaymentsNotifications from "./steps/Step7PaymentsNotifications";
 import Step8ReviewExport from "./steps/Step8ReviewExport";
 import StepOthers from "./steps/StepOthers";
-import { CheckCircle2, Circle, ChevronRight, LogOut, Lock, PanelLeft } from "lucide-react";
-import { isStepComplete } from "./lib/stepValidation";
+import { CheckCircle2, Circle, ChevronRight, LogOut, Lock, PanelLeft, ChevronDown } from "lucide-react";
 
 type Screen = "login" | "admin" | "account-home" | "wizard";
 
 const TOTAL_STEPS = 13;
 
-// Flat map of stepId → label (used for mobile bar)
+// ── Step ID constants ─────────────────────────────────────────────────────────
+// Free-navigation top-level sections
+const STEP_ACCOUNT    = 1;   // Account Settings  → Step1AccountProfile
+const STEP_BOUNDARY   = 3;   // Boundary          → Step3Deployment
+const STEP_BRANDING   = 2;   // Branding          → Step2Branding
+const STEP_OTHER_INFO = 12;  // Other Information → StepOthers
+const STEP_REVIEW     = 13;  // Review            → Step8ReviewExport
+
+// Application Configuration sub-steps (must be completed in order)
+const APP_CONFIG_STEPS = [
+  { id: 6,  label: "Form Configuration" },
+  { id: 5,  label: "Trade Categories & Overall Config" },
+  { id: 7,  label: "Roles" },
+  { id: 9,  label: "Workflow" },
+  { id: 8,  label: "Fees" },
+  { id: 10, label: "Payments & Notifications" },
+  { id: 4,  label: "Integrations" },
+] as const;
+
+// Users section — locked until all App Config sub-steps are complete
+const STEP_USERS = 11;
+
+// All App Config step IDs in order
+const APP_CONFIG_STEP_IDS: readonly number[] = APP_CONFIG_STEPS.map((s) => s.id);
+
+// Ordered list of all steps matching sidebar top-to-bottom layout
+const ORDERED_STEPS: number[] = [
+  STEP_ACCOUNT,
+  STEP_BOUNDARY,
+  STEP_BRANDING,
+  ...APP_CONFIG_STEP_IDS,
+  STEP_USERS,
+  STEP_OTHER_INFO,
+  STEP_REVIEW,
+];
+
+// Human-readable labels for toast messages
 const STEP_LABEL: Record<number, string> = {
-  1:  "Overview",
+  1:  "Account Settings",
   2:  "Branding",
   3:  "Boundary",
   4:  "Integrations",
-  5:  "Overall Configuration",
-  6:  "Application Form",
+  5:  "Trade Categories & Overall Config",
+  6:  "Form Configuration",
   7:  "Roles",
   8:  "Fees",
   9:  "Workflow",
-  10: "Notifications",
+  10: "Payments & Notifications",
   11: "Users",
   12: "Other Information",
-  13: "Review & Export",
+  13: "Review",
 };
 
-// Grouped sidebar structure
-const STEP_GROUPS = [
-  {
-    label: "Account Profile",
-    steps: [
-      { id: 1,  label: "Overview" },
-      { id: 2,  label: "Branding" },
-      { id: 3,  label: "Boundary" },
-      { id: 4,  label: "Integrations" },
-    ],
-  },
-  {
-    label: "Application Details",
-    steps: [
-      { id: 5,  label: "Overall Configuration" },
-      { id: 6,  label: "Application Form" },
-      { id: 7,  label: "Roles" },
-      { id: 8,  label: "Fees" },
-      { id: 9,  label: "Workflow" },
-      { id: 10, label: "Notifications" },
-    ],
-  },
-  {
-    label: "Users & Notes",
-    steps: [
-      { id: 11, label: "User Assignment" },
-      { id: 12, label: "Other Information" },
-    ],
-  },
-];
+// Free-navigation step IDs (can always be clicked)
+const FREE_NAV_STEPS: number[] = [STEP_ACCOUNT, STEP_BOUNDARY, STEP_BRANDING, STEP_OTHER_INFO, STEP_REVIEW];
 
-// Steps that require a previous step to be completed first
-const STEP_PREREQUISITES: Record<number, number> = {
-  6: 5, 7: 6, 8: 7, 9: 8, 10: 9,
-};
+function loadCompletedSteps(): Set<number> {
+  try {
+    const raw = localStorage.getItem(COMPLETED_STEPS_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw) as number[];
+      if (Array.isArray(arr)) return new Set(arr);
+    }
+  } catch { /* ignore */ }
+  return new Set<number>();
+}
+
+function saveCompletedSteps(steps: Set<number>) {
+  localStorage.setItem(COMPLETED_STEPS_KEY, JSON.stringify([...steps]));
+}
+
+function allAppConfigDone(done: Set<number>): boolean {
+  return APP_CONFIG_STEP_IDS.every((id) => done.has(id));
+}
+
+function isStepAccessible(stepId: number, done: Set<number>): boolean {
+  if (FREE_NAV_STEPS.includes(stepId)) return true;
+  if (stepId === STEP_USERS) return allAppConfigDone(done);
+  const idx = APP_CONFIG_STEP_IDS.indexOf(stepId);
+  if (idx === -1) return true;   // unknown — allow
+  if (idx === 0)  return true;   // first App Config step always accessible
+  return APP_CONFIG_STEP_IDS.slice(0, idx).every((id) => done.has(id));
+}
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("login");
@@ -87,6 +121,8 @@ export default function App() {
 
   const [currentStep, setCurrentStep] = useState(1);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(loadCompletedSteps);
+
   const [config, setConfig] = useState<ImplementationConfig>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -95,22 +131,24 @@ export default function App() {
         if (!parsed.workflow)     parsed.workflow     = DEFAULT_CONFIG.workflow;
         if (!parsed.integrations) parsed.integrations = DEFAULT_CONFIG.integrations;
         if (!parsed.overall)      parsed.overall      = DEFAULT_CONFIG.overall;
-        // Migrate formConfig to new shape
         if (!parsed.formConfig.documents)         parsed.formConfig.documents         = DEFAULT_CONFIG.formConfig.documents;
         if (!parsed.formConfig.customSubsections) parsed.formConfig.customSubsections = [];
         if (!parsed.formConfig.customFields)      parsed.formConfig.customFields      = [];
         if (parsed.formConfig.declarationMobileOtpEnabled === undefined) parsed.formConfig.declarationMobileOtpEnabled = false;
-        // Migrate deployment to new boundary shape
         if (parsed.deployment.hierarchyName === undefined)   parsed.deployment.hierarchyName   = "";
         if (!parsed.deployment.hierarchyLevels)              parsed.deployment.hierarchyLevels = [];
         if (!parsed.deployment.boundaryRows)                 parsed.deployment.boundaryRows    = [];
         if (parsed.deployment.uploadMethod === undefined)    parsed.deployment.uploadMethod    = "";
         if (parsed.deployment.shapefileName === undefined)   parsed.deployment.shapefileName   = "";
         if (parsed.deployment.operatingLevel === undefined)  parsed.deployment.operatingLevel  = 0;
-        // Migrate fees to new shape
         if (!parsed.fees.inspectionFeeMode)   { parsed.fees.inspectionFeeMode = "slab"; parsed.fees.inspectionFeeFlat = 500; parsed.fees.inspectionSlabDimension = "Business Area (sq ft)"; }
         if (!parsed.fees.licenseFeeMode)      { parsed.fees.licenseFeeMode = "slab"; parsed.fees.licenseFeeFlat = 1000; parsed.fees.licenseFeeSlabs = DEFAULT_CONFIG.fees.licenseFeeSlabs; parsed.fees.licenseSlabDimension = "Business Area (sq ft)"; }
-        // Migrate workflow stages
+        // Migrate fees to Issue #5 shape
+        if (parsed.fees.feeMode === undefined)       parsed.fees.feeMode        = "flat";
+        if (parsed.fees.flatFeeAmount === undefined) parsed.fees.flatFeeAmount  = 0;
+        if (!parsed.fees.customFeeFields)            parsed.fees.customFeeFields = [];
+        if (!parsed.fees.customFeeSlabs)             parsed.fees.customFeeSlabs  = {};
+        if (!parsed.fees.customFeeTable)             parsed.fees.customFeeTable  = [];
         if (!parsed.workflow.stages)         parsed.workflow.stages         = DEFAULT_CONFIG.workflow.stages;
         if (!parsed.workflow.checklistItems) parsed.workflow.checklistItems = DEFAULT_CONFIG.workflow.checklistItems;
         if (parsed.notes === undefined)      parsed.notes = "";
@@ -154,11 +192,7 @@ export default function App() {
     setScreen("admin");
   }
 
-  function handleSuperUserLogin(account: AccountRecord) {
-    setIsAdmin(false);
-    setOpenedFromAdmin(false);
-    setSuperUserAccount(account);
-    const loaded = account.config_data ?? DEFAULT_CONFIG;
+  function applyMigrations(loaded: ImplementationConfig): ImplementationConfig {
     if (!loaded.workflow)     loaded.workflow     = DEFAULT_CONFIG.workflow;
     if (!loaded.integrations) loaded.integrations = DEFAULT_CONFIG.integrations;
     if (loaded.integrations.onlinePaymentEnabled === undefined) loaded.integrations.onlinePaymentEnabled = false;
@@ -179,6 +213,12 @@ export default function App() {
     if (loaded.deployment.operatingLevel === undefined)  loaded.deployment.operatingLevel  = 0;
     if (!loaded.fees.inspectionFeeMode)   { loaded.fees.inspectionFeeMode = "slab"; loaded.fees.inspectionFeeFlat = 500; loaded.fees.inspectionSlabDimension = "Business Area (sq ft)"; }
     if (!loaded.fees.licenseFeeMode)      { loaded.fees.licenseFeeMode = "slab"; loaded.fees.licenseFeeFlat = 1000; loaded.fees.licenseFeeSlabs = DEFAULT_CONFIG.fees.licenseFeeSlabs; loaded.fees.licenseSlabDimension = "Business Area (sq ft)"; }
+    // Migrate fees to Issue #5 shape
+    if (loaded.fees.feeMode === undefined)       loaded.fees.feeMode        = "flat";
+    if (loaded.fees.flatFeeAmount === undefined) loaded.fees.flatFeeAmount  = 0;
+    if (!loaded.fees.customFeeFields)            loaded.fees.customFeeFields = [];
+    if (!loaded.fees.customFeeSlabs)             loaded.fees.customFeeSlabs  = {};
+    if (!loaded.fees.customFeeTable)             loaded.fees.customFeeTable  = [];
     if (!loaded.workflow.stages)         loaded.workflow.stages       = DEFAULT_CONFIG.workflow.stages;
     if (!loaded.workflow.checklistItems) loaded.workflow.checklistItems = DEFAULT_CONFIG.workflow.checklistItems;
     if (loaded.notes === undefined)      loaded.notes                 = "";
@@ -186,6 +226,14 @@ export default function App() {
     if (!loaded.overall.licenseIdFormat)     loaded.overall.licenseIdFormat     = "LIC-YYYY-NNNNNN";
     if (loaded.paymentsNotifications.notificationChannels.ussd === undefined) loaded.paymentsNotifications.notificationChannels.ussd = false;
     if (!loaded.paymentsNotifications.notificationTemplates) loaded.paymentsNotifications.notificationTemplates = DEFAULT_CONFIG.paymentsNotifications.notificationTemplates;
+    return loaded;
+  }
+
+  function handleSuperUserLogin(account: AccountRecord) {
+    setIsAdmin(false);
+    setOpenedFromAdmin(false);
+    setSuperUserAccount(account);
+    const loaded = applyMigrations(account.config_data ?? DEFAULT_CONFIG);
     setConfig(loaded);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
     const step = Math.max(1, Math.min(account.current_step ?? 1, TOTAL_STEPS));
@@ -198,34 +246,7 @@ export default function App() {
     setIsAdmin(false);
     setOpenedFromAdmin(true);
     setSuperUserAccount(account);
-    const loaded = account.config_data ?? DEFAULT_CONFIG;
-    if (!loaded.workflow)     loaded.workflow     = DEFAULT_CONFIG.workflow;
-    if (!loaded.integrations) loaded.integrations = DEFAULT_CONFIG.integrations;
-    if (loaded.integrations.onlinePaymentEnabled === undefined) loaded.integrations.onlinePaymentEnabled = false;
-    if (!loaded.integrations.paymentGatewayPreference) loaded.integrations.paymentGatewayPreference = "";
-    if (loaded.integrations.paymentGatewayDetails === undefined) loaded.integrations.paymentGatewayDetails = "";
-    if (!loaded.overall)      loaded.overall      = DEFAULT_CONFIG.overall;
-    if (!loaded.formConfig.documents)         loaded.formConfig.documents         = DEFAULT_CONFIG.formConfig.documents;
-    if (!loaded.formConfig.customSubsections) loaded.formConfig.customSubsections = [];
-    if (!loaded.formConfig.customFields)           loaded.formConfig.customFields           = [];
-    if (loaded.formConfig.declarationMobileOtpEnabled === undefined) loaded.formConfig.declarationMobileOtpEnabled = false;
-    if (!loaded.formConfig.deletedRecommendedFields) loaded.formConfig.deletedRecommendedFields = [];
-    if (!loaded.formConfig.editedRecommendedFields)  loaded.formConfig.editedRecommendedFields  = {};
-    if (loaded.deployment.hierarchyName === undefined)   loaded.deployment.hierarchyName   = "";
-    if (!loaded.deployment.hierarchyLevels)              loaded.deployment.hierarchyLevels = [];
-    if (!loaded.deployment.boundaryRows)                 loaded.deployment.boundaryRows    = [];
-    if (loaded.deployment.uploadMethod === undefined)    loaded.deployment.uploadMethod    = "";
-    if (loaded.deployment.shapefileName === undefined)   loaded.deployment.shapefileName   = "";
-    if (loaded.deployment.operatingLevel === undefined)  loaded.deployment.operatingLevel  = 0;
-    if (!loaded.fees.inspectionFeeMode)   { loaded.fees.inspectionFeeMode = "slab"; loaded.fees.inspectionFeeFlat = 500; loaded.fees.inspectionSlabDimension = "Business Area (sq ft)"; }
-    if (!loaded.fees.licenseFeeMode)      { loaded.fees.licenseFeeMode = "slab"; loaded.fees.licenseFeeFlat = 1000; loaded.fees.licenseFeeSlabs = DEFAULT_CONFIG.fees.licenseFeeSlabs; loaded.fees.licenseSlabDimension = "Business Area (sq ft)"; }
-    if (!loaded.workflow.stages)         loaded.workflow.stages       = DEFAULT_CONFIG.workflow.stages;
-    if (!loaded.workflow.checklistItems) loaded.workflow.checklistItems = DEFAULT_CONFIG.workflow.checklistItems;
-    if (loaded.notes === undefined)      loaded.notes                 = "";
-    if (!loaded.overall.licenseValidityMode) loaded.overall.licenseValidityMode = "fixed";
-    if (!loaded.overall.licenseIdFormat)     loaded.overall.licenseIdFormat     = "LIC-YYYY-NNNNNN";
-    if (loaded.paymentsNotifications.notificationChannels.ussd === undefined) loaded.paymentsNotifications.notificationChannels.ussd = false;
-    if (!loaded.paymentsNotifications.notificationTemplates) loaded.paymentsNotifications.notificationTemplates = DEFAULT_CONFIG.paymentsNotifications.notificationTemplates;
+    const loaded = applyMigrations(account.config_data ?? DEFAULT_CONFIG);
     setConfig(loaded);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
     const step = Math.max(1, Math.min(account.current_step ?? 1, TOTAL_STEPS));
@@ -259,16 +280,43 @@ export default function App() {
   }
 
   // ── Wizard navigation ───────────────────────────────────────────────────────
-  const goNext = () => setCurrentStep((s) => Math.min(s + 1, TOTAL_STEPS));
-  const goPrev = () => {
-    if (currentStep === 1) {
+
+  /** Mark a step as completed and persist to localStorage */
+  const markComplete = useCallback((stepId: number) => {
+    setCompletedSteps((prev) => {
+      const next = new Set(prev);
+      next.add(stepId);
+      saveCompletedSteps(next);
+      return next;
+    });
+  }, []);
+
+  /**
+   * Advance to the next step in ORDERED_STEPS, marking current step done.
+   */
+  const goNext = useCallback(() => {
+    markComplete(currentStep);
+    const idx = ORDERED_STEPS.indexOf(currentStep);
+    if (idx !== -1 && idx < ORDERED_STEPS.length - 1) {
+      setCurrentStep(ORDERED_STEPS[idx + 1]);
+    }
+    // If somehow currentStep is not in ORDERED_STEPS, do nothing special
+  }, [currentStep, markComplete]);
+
+  const goPrev = useCallback(() => {
+    const idx = ORDERED_STEPS.indexOf(currentStep);
+    if (idx > 0) {
+      setCurrentStep(ORDERED_STEPS[idx - 1]);
+    } else {
       if (isAdmin || openedFromAdmin) handleBackToAdmin();
       else handleBackToAccountHome();
-    } else {
-      setCurrentStep((s) => Math.max(s - 1, 1));
     }
-  };
-  const goToStep = (s: number) => { if (s >= 1 && s <= TOTAL_STEPS) setCurrentStep(s); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentStep, isAdmin, openedFromAdmin]);
+
+  const goToStep = useCallback((s: number) => {
+    if (s >= 1 && s <= TOTAL_STEPS) setCurrentStep(s);
+  }, []);
 
   const stepProps = { config, updateConfig, onNext: goNext, onBack: goPrev, onSaveDraft: saveDraft };
 
@@ -297,6 +345,75 @@ export default function App() {
     );
   }
 
+  // ── Sidebar helpers (defined inside render for access to state closures) ────
+
+  const appConfigActive = APP_CONFIG_STEP_IDS.includes(currentStep);
+  const appConfigAllDone = allAppConfigDone(completedSteps);
+
+  function getLockReason(stepId: number): string {
+    if (stepId === STEP_USERS) {
+      const missing = APP_CONFIG_STEPS.find((s) => !completedSteps.has(s.id));
+      return missing
+        ? `Complete "${missing.label}" in Application Configuration first.`
+        : "Complete all Application Configuration steps first.";
+    }
+    const idx = APP_CONFIG_STEP_IDS.indexOf(stepId);
+    if (idx > 0) {
+      const prevId = APP_CONFIG_STEP_IDS[idx - 1];
+      return `Complete "${STEP_LABEL[prevId]}" first.`;
+    }
+    return "Complete the previous step first.";
+  }
+
+  function handleSidebarClick(stepId: number) {
+    if (!isStepAccessible(stepId, completedSteps)) {
+      setSidebarLockedMsg(getLockReason(stepId));
+      setTimeout(() => setSidebarLockedMsg(null), 3500);
+    } else {
+      goToStep(stepId);
+    }
+  }
+
+  function SidebarItem({
+    stepId,
+    label,
+    indented = false,
+  }: {
+    stepId: number;
+    label: string;
+    indented?: boolean;
+  }) {
+    const accessible = isStepAccessible(stepId, completedSteps);
+    const active = stepId === currentStep;
+    const completed = completedSteps.has(stepId);
+
+    return (
+      <button
+        onClick={() => handleSidebarClick(stepId)}
+        className={[
+          "flex items-center gap-2.5 py-2 rounded-lg text-sm transition-all text-left w-full",
+          indented ? "pl-8 pr-3" : "pl-3 pr-3",
+          !accessible
+            ? "text-slate-400 cursor-default"
+            : active
+            ? "bg-blue-50 text-blue-700 font-medium"
+            : "text-slate-600 hover:bg-slate-50",
+        ].join(" ")}
+      >
+        {!accessible
+          ? <Lock size={13} className="text-slate-300 shrink-0" />
+          : completed
+          ? <CheckCircle2 size={14} className="text-green-500 shrink-0" />
+          : active
+          ? <ChevronRight size={14} className="text-blue-600 shrink-0" />
+          : <Circle size={14} className="text-slate-300 shrink-0" />}
+        <span className={`truncate ${!accessible ? "line-through decoration-slate-300" : ""}`}>
+          {label}
+        </span>
+      </button>
+    );
+  }
+
   // Wizard screen
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -314,7 +431,6 @@ export default function App() {
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* Sidebar toggle */}
           <button
             onClick={() => setSidebarOpen((o) => !o)}
             className="flex items-center justify-center w-8 h-8 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
@@ -322,7 +438,6 @@ export default function App() {
           >
             <PanelLeft size={17} />
           </button>
-          {/* eGov Foundation attribution */}
           <a href="https://egov.org.in" target="_blank" rel="noopener noreferrer" className="hidden sm:flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors">
             <img
               src="https://egov.org.in/favicon.ico"
@@ -333,7 +448,7 @@ export default function App() {
             <span>Powered by eGov</span>
           </a>
           <div className="text-xs text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
-            Step {currentStep} of {TOTAL_STEPS}
+            {STEP_LABEL[currentStep]}
           </div>
           {(isAdmin || openedFromAdmin) && (
             <button
@@ -371,13 +486,13 @@ export default function App() {
         )}
 
         {/* Sidebar */}
-        <aside className={`
-          flex-col w-64 bg-white border-r border-slate-200 py-6 px-4 overflow-y-auto
-          fixed top-14 left-0 h-[calc(100vh-3.5rem)] z-30
-          lg:sticky lg:z-auto lg:top-14 lg:h-[calc(100vh-3.5rem)]
-          transition-transform duration-200
-          ${sidebarOpen ? "flex translate-x-0" : "hidden -translate-x-full"}
-        `}>
+        <aside className={[
+          "flex-col w-64 bg-white border-r border-slate-200 py-6 px-3 overflow-y-auto",
+          "fixed top-14 left-0 h-[calc(100vh-3.5rem)] z-30",
+          "lg:sticky lg:z-auto lg:top-14 lg:h-[calc(100vh-3.5rem)]",
+          "transition-transform duration-200",
+          sidebarOpen ? "flex translate-x-0" : "hidden -translate-x-full",
+        ].join(" ")}>
           <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4 px-2">
             Setup Checklist
           </p>
@@ -389,71 +504,71 @@ export default function App() {
             </div>
           )}
 
-          <div className="flex flex-col gap-4">
-            {STEP_GROUPS.map((group, gi) => (
-              <div key={gi}>
-                <p className="text-xs font-semibold text-slate-500 px-2 mb-1.5 uppercase tracking-wide">
-                  {group.label}
-                </p>
-                <div className="flex flex-col gap-0.5">
-                  {group.steps.map((step) => {
-                    const complete = isStepComplete(step.id, config);
-                    const active = step.id === currentStep;
-                    const prereqId = STEP_PREREQUISITES[step.id];
-                    const locked = !!(prereqId && !isStepComplete(prereqId, config));
-                    return (
-                      <button
-                        key={step.id}
-                        onClick={() => {
-                          if (locked) {
-                            setSidebarLockedMsg(`Complete "${STEP_LABEL[prereqId]}" before accessing this step.`);
-                            setTimeout(() => setSidebarLockedMsg(null), 3500);
-                          } else {
-                            goToStep(step.id);
-                          }
-                        }}
-                        className={`
-                          flex items-center gap-2.5 pl-5 pr-3 py-2 rounded-lg text-sm transition-all text-left
-                          ${locked ? "text-slate-400 cursor-default" : active ? "bg-blue-50 text-blue-700 font-medium" : "text-slate-600 hover:bg-slate-50"}
-                        `}
-                      >
-                        {locked
-                          ? <Lock size={13} className="text-slate-300 shrink-0" />
-                          : complete
-                          ? <CheckCircle2 size={15} className="text-green-500 shrink-0" />
-                          : active
-                          ? <ChevronRight size={15} className="text-blue-600 shrink-0" />
-                          : <Circle size={15} className="text-slate-300 shrink-0" />}
-                        <span className="truncate">{step.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-col gap-0.5">
 
-            {/* Review & Export — top-level peer of group headers */}
-            {(() => {
-              const complete = isStepComplete(13, config);
-              const active = currentStep === 13;
-              return (
-                <button
-                  onClick={() => goToStep(13)}
-                  className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors text-left w-full ${
-                    active ? "text-blue-700 bg-blue-50" : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
-                  }`}
-                >
-                  {complete
-                    ? <CheckCircle2 size={13} className="text-green-500 shrink-0" />
-                    : active
-                    ? <ChevronRight size={13} className="text-blue-600 shrink-0" />
-                    : <Circle size={13} className="text-slate-300 shrink-0" />}
-                  <span className="text-xs font-semibold uppercase tracking-wide truncate">
-                    Review & Export
+            {/* 1. Account Settings — free nav */}
+            <SidebarItem stepId={STEP_ACCOUNT} label="Account Settings" />
+
+            {/* 2. Boundary — free nav */}
+            <SidebarItem stepId={STEP_BOUNDARY} label="Boundary" />
+
+            {/* 3. Branding — free nav */}
+            <SidebarItem stepId={STEP_BRANDING} label="Branding" />
+
+            {/* 4. Application Configuration — sequential sub-steps, always expanded */}
+            <div className="mt-2">
+              <button
+                onClick={() => {
+                  // Navigate to first accessible App Config sub-step
+                  const first = APP_CONFIG_STEPS.find((s) =>
+                    isStepAccessible(s.id, completedSteps)
+                  );
+                  if (first) goToStep(first.id);
+                }}
+                className={[
+                  "flex items-center justify-between w-full px-2 py-1.5 rounded-lg text-left transition-colors",
+                  appConfigActive
+                    ? "text-blue-700 bg-blue-50/50"
+                    : "text-slate-600 hover:text-slate-800 hover:bg-slate-50",
+                ].join(" ")}
+              >
+                <div className="flex items-center gap-2">
+                  {appConfigAllDone
+                    ? <CheckCircle2 size={14} className="text-green-500 shrink-0" />
+                    : appConfigActive
+                    ? <ChevronRight size={14} className="text-blue-600 shrink-0" />
+                    : <Circle size={14} className="text-slate-300 shrink-0" />}
+                  <span className="text-xs font-semibold uppercase tracking-wide">
+                    Application Config
                   </span>
-                </button>
-              );
-            })()}
+                </div>
+                <ChevronDown size={13} className="text-slate-400 shrink-0" />
+              </button>
+
+              <div className="flex flex-col gap-0.5 mt-0.5">
+                {APP_CONFIG_STEPS.map((s) => (
+                  <SidebarItem
+                    key={s.id}
+                    stepId={s.id}
+                    label={s.label}
+                    indented
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* 5. Users — locked until all App Config done */}
+            <div className="mt-2">
+              <SidebarItem stepId={STEP_USERS} label="Users" />
+            </div>
+
+            {/* 6. Other Information — free nav */}
+            <SidebarItem stepId={STEP_OTHER_INFO} label="Other Information" />
+
+            {/* 7. Review — free nav, visually separated */}
+            <div className="mt-2 pt-2 border-t border-slate-100">
+              <SidebarItem stepId={STEP_REVIEW} label="Review & Export" />
+            </div>
           </div>
 
           <div className="mt-auto pt-4 border-t border-slate-100">
@@ -466,30 +581,31 @@ export default function App() {
           {/* Mobile progress bar */}
           <div className="lg:hidden mb-6">
             <div className="flex justify-between text-xs text-slate-500 mb-1">
-              <span>{STEP_LABEL[currentStep]}</span>
-              <span>{currentStep}/{TOTAL_STEPS}</span>
+              <span className="font-medium">{STEP_LABEL[currentStep]}</span>
+              <span>{completedSteps.size}/{ORDERED_STEPS.length} sections done</span>
             </div>
             <div className="w-full bg-slate-200 rounded-full h-1.5">
               <div
                 className="bg-blue-600 h-1.5 rounded-full transition-all duration-300"
-                style={{ width: `${(currentStep / TOTAL_STEPS) * 100}%` }}
+                style={{ width: `${(completedSteps.size / ORDERED_STEPS.length) * 100}%` }}
               />
             </div>
           </div>
 
-          {currentStep === 1  && <Step1AccountProfile {...stepProps} />}
-          {currentStep === 2  && <Step2Branding {...stepProps} />}
-          {currentStep === 3  && <Step3Deployment {...stepProps} />}
-          {currentStep === 4  && <StepIntegrations {...stepProps} />}
-          {currentStep === 5  && <StepOverallConfig {...stepProps} />}
-          {currentStep === 6  && <Step4FormConfig {...stepProps} />}
-          {currentStep === 7  && <Step5RolesStaff {...stepProps} />}
-          {currentStep === 8  && <Step6Fees {...stepProps} />}
-          {currentStep === 9  && <StepWorkflow {...stepProps} />}
-          {currentStep === 10 && <Step7PaymentsNotifications {...stepProps} />}
-          {currentStep === 11 && <StepUsers {...stepProps} />}
-          {currentStep === 12 && <StepOthers {...stepProps} />}
-          {currentStep === 13 && (
+          {/* Step components — unchanged */}
+          {currentStep === STEP_ACCOUNT    && <Step1AccountProfile {...stepProps} />}
+          {currentStep === STEP_BRANDING   && <Step2Branding {...stepProps} />}
+          {currentStep === STEP_BOUNDARY   && <Step3Deployment {...stepProps} />}
+          {currentStep === 4               && <StepIntegrations {...stepProps} />}
+          {currentStep === 5               && <StepOverallConfig {...stepProps} />}
+          {currentStep === 6               && <Step4FormConfig {...stepProps} />}
+          {currentStep === 7               && <Step5RolesStaff {...stepProps} />}
+          {currentStep === 8               && <Step6Fees {...stepProps} />}
+          {currentStep === 9               && <StepWorkflow {...stepProps} />}
+          {currentStep === 10              && <Step7PaymentsNotifications {...stepProps} />}
+          {currentStep === STEP_USERS      && <StepUsers {...stepProps} />}
+          {currentStep === STEP_OTHER_INFO && <StepOthers {...stepProps} />}
+          {currentStep === STEP_REVIEW     && (
             <Step8ReviewExport config={config} onBack={goPrev} onGoToStep={goToStep} updateConfig={updateConfig} />
           )}
         </main>

@@ -106,6 +106,15 @@ export interface FeeSlabRow {
   amount: number;
 }
 
+// New types for custom logic fee mode
+export type FeesTopLevelMode = "flat" | "custom";
+
+export interface CustomFeeSlabEntry {
+  label: string;      // e.g. "0–100 sq ft"
+  upperBound: number; // upper bound value of this slab range
+  amount: number;     // fee amount for this slab
+}
+
 export interface FeesConfig {
   currency: string;
   currencySymbol: string;
@@ -124,6 +133,15 @@ export interface FeesConfig {
   licenseFeeRatePerSqFt: number;  // kept for display in slab mode as rate
   licenseFeeSlabs: FeeSlabRow[];
   licenseSlabDimension: string;
+
+  // ── New: top-level fee mode (Issue #5) ──────────────────────────────────────
+  feeMode: FeesTopLevelMode;
+  // Flat fee mode
+  flatFeeAmount: number;
+  // Custom logic mode
+  customFeeFields: string[];   // field IDs (or names for recommended fields) selected by the user
+  customFeeSlabs: Record<string, CustomFeeSlabEntry[]>;  // keyed by field id/name
+  customFeeTable: Array<Record<string, number | string>>; // generated fee matrix rows
 }
 
 // ── Payments & Notifications ─────────────────────────────────────────────────

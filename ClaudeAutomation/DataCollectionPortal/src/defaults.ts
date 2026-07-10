@@ -173,6 +173,12 @@ export const DEFAULT_CONFIG: ImplementationConfig = {
       { label: "500+ sq ft",     amount: 5000 },
     ],
     licenseSlabDimension: "Business Area (sq ft)",
+    // New fields (Issue #5)
+    feeMode: "flat",
+    flatFeeAmount: 0,
+    customFeeFields: [],
+    customFeeSlabs: {},
+    customFeeTable: [],
   },
   workflow: {
     approvalLevels: 2,
