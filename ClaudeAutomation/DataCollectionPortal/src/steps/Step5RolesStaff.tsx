@@ -49,6 +49,24 @@ export default function Step5RolesStaff({ config, updateConfig, onNext, onBack, 
     setRoles(roles.filter((_, i) => i !== idx));
   }
 
+  const rolesSummaryItems = [
+    {
+      label: "Total Roles",
+      value: `${roles.length} role${roles.length !== 1 ? "s" : ""} defined`,
+    },
+    {
+      label: "Role Names",
+      value: roles.length > 0 ? roles.map((r) => r.name) : ["None defined"],
+    },
+    {
+      label: "Staff Assigned",
+      value: (() => {
+        const total = roles.reduce((sum, r) => sum + (r.staffEmails?.length ?? 0) + (r.staffMembers?.length ?? 0), 0);
+        return total > 0 ? `${total} staff member${total !== 1 ? "s" : ""} assigned` : "No staff assigned yet";
+      })(),
+    },
+  ];
+
   return (
     <StepWrapper
       step={7}
@@ -57,6 +75,8 @@ export default function Step5RolesStaff({ config, updateConfig, onNext, onBack, 
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      summaryItems={rolesSummaryItems}
+      nextSectionLabel="Configure Workflow"
     >
       <div className="space-y-6">
 

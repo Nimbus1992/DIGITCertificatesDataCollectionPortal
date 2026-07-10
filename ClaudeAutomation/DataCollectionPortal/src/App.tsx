@@ -163,6 +163,7 @@ export default function App() {
         if (!parsed.workflow.renewalStages)         parsed.workflow.renewalStages         = [];
         if (!parsed.workflow.renewalChecklistItems) parsed.workflow.renewalChecklistItems = [];
         if (parsed.notes === undefined)             parsed.notes = "";
+        if (!parsed.overall.renewalApprovalMode) parsed.overall.renewalApprovalMode = "auto_if_unchanged";
         if (parsed.paymentsNotifications.notificationChannels.ussd === undefined) parsed.paymentsNotifications.notificationChannels.ussd = false;
         if (!parsed.paymentsNotifications.notificationTemplates) parsed.paymentsNotifications.notificationTemplates = DEFAULT_CONFIG.paymentsNotifications.notificationTemplates;
         if (parsed.roles) {
@@ -247,6 +248,7 @@ export default function App() {
     if (loaded.notes === undefined)             loaded.notes                         = "";
     if (!loaded.overall.licenseValidityMode) loaded.overall.licenseValidityMode = "fixed";
     if (!loaded.overall.licenseIdFormat)     loaded.overall.licenseIdFormat     = "LIC-YYYY-NNNNNN";
+    if (!loaded.overall.renewalApprovalMode) loaded.overall.renewalApprovalMode = "auto_if_unchanged";
     if (loaded.paymentsNotifications.notificationChannels.ussd === undefined) loaded.paymentsNotifications.notificationChannels.ussd = false;
     if (!loaded.paymentsNotifications.notificationTemplates) loaded.paymentsNotifications.notificationTemplates = DEFAULT_CONFIG.paymentsNotifications.notificationTemplates;
     if (loaded.roles) {

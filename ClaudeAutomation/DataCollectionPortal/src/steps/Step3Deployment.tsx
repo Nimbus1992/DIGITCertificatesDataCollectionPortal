@@ -254,6 +254,30 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
     }, 1500);
   };
 
+  // Build summary items from current deployment config
+  const boundarySummaryItems = [
+    { label: "Boundary Name", value: d.hierarchyName || "—" },
+    { label: "Upload Method", value: d.uploadMethod === "shapefile" ? "Shapefile" : d.uploadMethod === "excel" ? "Excel" : "—" },
+    {
+      label: "Hierarchy Levels",
+      value: levels.length > 0 ? levels.map((l) => l.name).filter(Boolean) : [] as string[],
+    },
+    {
+      label: "Operating Level",
+      value: levels.length > 0 && operatingLevel < levels.length
+        ? levels[operatingLevel]?.name || "—"
+        : "—",
+    },
+    {
+      label: "Data Rows",
+      value: d.uploadMethod === "excel" && rows.length > 0
+        ? `${rows.length} rows uploaded`
+        : d.uploadMethod === "shapefile" && d.shapefileName
+        ? `Shapefile: ${d.shapefileName}`
+        : "—",
+    },
+  ];
+
   return (
     <StepWrapper
       step={3}
@@ -262,6 +286,8 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
       onNext={handleNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      summaryItems={boundarySummaryItems}
+      nextSectionLabel="Configure Branding"
     >
       <div className="space-y-5">
 

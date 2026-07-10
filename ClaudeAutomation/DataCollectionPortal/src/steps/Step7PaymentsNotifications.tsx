@@ -143,6 +143,25 @@ export default function Step7PaymentsNotifications({ config, updateConfig, onNex
     );
   };
 
+  const enabledChannels = [
+    p.notificationChannels.email && "Email",
+    p.notificationChannels.sms && "SMS",
+    p.notificationChannels.ussd && "USSD",
+  ].filter(Boolean) as string[];
+
+  const notificationsSummaryItems = [
+    {
+      label: "Active Channels",
+      value: enabledChannels.length > 0 ? enabledChannels : ["None enabled"],
+    },
+    {
+      label: "Notification Templates",
+      value: (p.notificationTemplates ?? []).length > 0
+        ? `${(p.notificationTemplates ?? []).length} template${(p.notificationTemplates ?? []).length !== 1 ? "s" : ""} configured`
+        : "None configured",
+    },
+  ];
+
   return (
     <StepWrapper
       step={10}
@@ -151,6 +170,8 @@ export default function Step7PaymentsNotifications({ config, updateConfig, onNex
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      summaryItems={notificationsSummaryItems}
+      nextSectionLabel="Configure Users"
     >
       <div className="space-y-6">
 

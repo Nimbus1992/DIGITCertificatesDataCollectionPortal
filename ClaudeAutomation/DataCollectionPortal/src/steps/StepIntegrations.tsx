@@ -35,6 +35,27 @@ export default function StepIntegrations({ config, updateConfig, onNext, onBack,
     update("customIntegrations", intg.customIntegrations.filter((_, i) => i !== index));
   }
 
+  const paymentGatewayValue = !intg.onlinePaymentEnabled
+    ? "No (offline)"
+    : intg.paymentGatewayPreference === "egov_choice"
+    ? "Yes — eGov will choose"
+    : intg.paymentGatewayPreference === "specify"
+    ? `Yes — ${intg.paymentGatewayDetails ? intg.paymentGatewayDetails.slice(0, 60) + (intg.paymentGatewayDetails.length > 60 ? "…" : "") : "gateway specified"}`
+    : "Yes";
+
+  const integrationsSummaryItems = [
+    { label: "SMS (Amazon SNS)", value: "Enabled (default)" },
+    { label: "Email (Amazon SES)", value: "Enabled (default)" },
+    { label: "Verifiable Credentials", value: "Enabled (default)" },
+    { label: "Online Payments", value: paymentGatewayValue },
+    {
+      label: "Custom Integrations",
+      value: intg.customIntegrations.length > 0
+        ? intg.customIntegrations.map((ci) => ci.name)
+        : ["None added"],
+    },
+  ];
+
   return (
     <StepWrapper
       step={4}
@@ -43,6 +64,8 @@ export default function StepIntegrations({ config, updateConfig, onNext, onBack,
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      summaryItems={integrationsSummaryItems}
+      nextSectionLabel="Start Application Configuration"
     >
       <div className="space-y-8">
 

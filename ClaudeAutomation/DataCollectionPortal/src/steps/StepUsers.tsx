@@ -78,6 +78,19 @@ export default function StepUsers({ config, updateConfig, onNext, onBack, onSave
     0
   );
 
+  const usersSummaryItems = [
+    {
+      label: "Total Staff Assigned",
+      value: `${totalAssigned} staff member${totalAssigned !== 1 ? "s" : ""} across ${staffRoles.length} role${staffRoles.length !== 1 ? "s" : ""}`,
+    },
+    ...staffRoles.slice(0, 5).map((r) => ({
+      label: r.name,
+      value: (r.staffMembers?.length ?? 0) > 0
+        ? `${r.staffMembers!.length} assigned`
+        : "No users assigned",
+    })),
+  ];
+
   return (
     <StepWrapper
       step={11}
@@ -86,6 +99,8 @@ export default function StepUsers({ config, updateConfig, onNext, onBack, onSave
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      summaryItems={usersSummaryItems}
+      nextSectionLabel="Review & Export"
     >
       <div className="space-y-5">
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">

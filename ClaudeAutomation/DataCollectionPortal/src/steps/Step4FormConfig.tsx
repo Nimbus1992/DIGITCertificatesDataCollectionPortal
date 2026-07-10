@@ -1269,6 +1269,29 @@ export default function Step4FormConfig({ config, updateConfig, onNext, onBack, 
     set({ documents: docs });
   };
 
+  const formSummaryItems = [
+    {
+      label: "Custom Fields",
+      value: f.customFields.length > 0
+        ? `${f.customFields.length} field${f.customFields.length !== 1 ? "s" : ""} added`
+        : "None",
+    },
+    {
+      label: "Documents Required",
+      value: f.documents.length > 0
+        ? `${f.documents.length} document type${f.documents.length !== 1 ? "s" : ""}`
+        : "None",
+    },
+    {
+      label: "ID Types Accepted",
+      value: f.idTypes.length > 0 ? f.idTypes : ["Not set"],
+    },
+    {
+      label: "Custom Subsections",
+      value: f.customSubsections.length > 0 ? f.customSubsections : ["None"],
+    },
+  ];
+
   return (
     <StepWrapper
       step={6}
@@ -1277,6 +1300,8 @@ export default function Step4FormConfig({ config, updateConfig, onNext, onBack, 
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      summaryItems={formSummaryItems}
+      nextSectionLabel="Configure Roles"
     >
       <div className="space-y-5">
         {/* Info banner */}

@@ -1,11 +1,11 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import type { ImplementationConfig, AccountProfile } from "../types";
 import {
   COUNTRY_OPTIONS, LANGUAGE_OPTIONS, CURRENCY_OPTIONS,
   MOBILE_PREFIX_OPTIONS, COUNTRY_TO_PREFIX,
 } from "../defaults";
 import { StepWrapper } from "./StepWrapper";
-import { Upload, X, Info } from "lucide-react";
+import { Info } from "lucide-react";
 
 interface Props {
   config: ImplementationConfig;
@@ -41,7 +41,6 @@ const DOMAIN_BASE = "www.digitcertificates.com/";
 
 export default function Step1AccountProfile({ config, updateConfig, onNext, onBack, onSaveDraft }: Props) {
   const [errors, setErrors] = useState<Partial<Record<keyof AccountProfile, string>>>({});
-  const logoInputRef = useRef<HTMLInputElement>(null);
   const a = config.account;
 
   const set = (field: keyof AccountProfile, value: string) => {
@@ -63,24 +62,6 @@ export default function Step1AccountProfile({ config, updateConfig, onNext, onBa
     }
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      set("logoDataUrl", dataUrl);
-      // Sync to branding as well
-      updateConfig("branding", { ...config.branding, logoUrl: dataUrl });
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const clearLogo = () => {
-    set("logoDataUrl", "");
-    updateConfig("branding", { ...config.branding, logoUrl: "" });
-    if (logoInputRef.current) logoInputRef.current.value = "";
-  };
 
   const validate = () => {
     const errs: Partial<Record<keyof AccountProfile, string>> = {};
@@ -177,54 +158,6 @@ export default function Step1AccountProfile({ config, updateConfig, onNext, onBa
             </Field>
           </div>
 
-          {/* Logo upload */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Organisation Logo{" "}
-              <span className="text-slate-400 font-normal text-xs">(optional)</span>
-            </label>
-            <p className="text-xs text-slate-500 mb-2">
-              Your logo will be displayed on the top right of the citizen and employee portals.
-              Accepted formats: PNG, JPG, SVG.
-            </p>
-
-            {a.logoDataUrl ? (
-              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
-                <img
-                  src={a.logoDataUrl}
-                  alt="Logo preview"
-                  className="h-10 object-contain rounded"
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-slate-600 font-medium">Logo uploaded</p>
-                  <p className="text-xs text-slate-400">Will appear top-right on all portals</p>
-                </div>
-                <button
-                  onClick={clearLogo}
-                  className="text-slate-400 hover:text-red-500 transition-colors"
-                  title="Remove logo"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={() => logoInputRef.current?.click()}
-                className="flex items-center gap-2 px-4 py-3 w-full rounded-lg border-2 border-dashed border-slate-300 hover:border-blue-400 hover:bg-blue-50 transition-colors text-sm text-slate-500 hover:text-blue-600"
-              >
-                <Upload size={16} />
-                Click to upload logo
-              </button>
-            )}
-            <input
-              ref={logoInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/svg+xml"
-              className="hidden"
-              onChange={handleLogoUpload}
-            />
-          </div>
         </div>
 
         {/* ── 2. Regional Settings ── */}

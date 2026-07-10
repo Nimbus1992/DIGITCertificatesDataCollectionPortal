@@ -326,6 +326,12 @@ export default function StepOverallConfig({ config, updateConfig, onNext, onBack
               </p>
               <div className="space-y-3">
                 <OptionCard
+                  selected={oc.renewalApprovalMode === "auto_all"}
+                  onClick={() => update("renewalApprovalMode", "auto_all")}
+                  label="Auto-approve all renewals"
+                  description="Every renewal is automatically approved without any review — no workflow runs at all. Useful when renewals are routine and risk is low."
+                />
+                <OptionCard
                   selected={oc.renewalApprovalMode === "auto_if_unchanged"}
                   onClick={() => update("renewalApprovalMode", "auto_if_unchanged")}
                   label="Auto-approve if nothing changed"
@@ -697,7 +703,7 @@ export default function StepOverallConfig({ config, updateConfig, onNext, onBack
               },
               oc.renewalEnabled && {
                 label: "Renewal",
-                value: `Reminder ${oc.renewalTriggerDays} days before · ${oc.renewalGracePeriodDays} day grace period · ${oc.renewalApprovalMode === "auto_if_unchanged" ? "Auto-approve if unchanged" : "Always through workflow"}`,
+                value: `Reminder ${oc.renewalTriggerDays} days before · ${oc.renewalGracePeriodDays} day grace period · ${oc.renewalApprovalMode === "auto_all" ? "Auto-approve all" : oc.renewalApprovalMode === "auto_if_unchanged" ? "Auto-approve if unchanged" : "Always through workflow"}`,
                 q: 2,
               },
               {

@@ -15,6 +15,15 @@ export default function StepOthers({ config, updateConfig, onNext, onBack, onSav
   const notes = config.notes ?? "";
   const count = notes.length;
 
+  const othersSummaryItems = [
+    {
+      label: "Additional Notes",
+      value: notes.trim()
+        ? `${notes.trim().length} characters provided`
+        : "None provided",
+    },
+  ];
+
   return (
     <StepWrapper
       step={12}
@@ -23,6 +32,8 @@ export default function StepOthers({ config, updateConfig, onNext, onBack, onSav
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      summaryItems={othersSummaryItems}
+      nextSectionLabel="Review & Export"
     >
       <div className="space-y-5">
 

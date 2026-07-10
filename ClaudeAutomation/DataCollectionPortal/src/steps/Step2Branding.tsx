@@ -32,6 +32,12 @@ export default function Step2Branding({ config, updateConfig, onNext, onBack, on
   const tagline    = b.portalTagline || "Apply for your Business License online — fast, simple, and paperless.";
   const logo       = b.logoUrl;
 
+  const summaryItems = [
+    { label: "Portal Name", value: b.portalName || "—" },
+    { label: "Tagline", value: b.portalTagline || "—" },
+    { label: "Logo", value: b.logoUrl ? "Uploaded" : "Not uploaded" },
+  ];
+
   return (
     <StepWrapper
       step={2}
@@ -40,6 +46,8 @@ export default function Step2Branding({ config, updateConfig, onNext, onBack, on
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      summaryItems={summaryItems}
+      nextSectionLabel="Configure Integrations"
     >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 
