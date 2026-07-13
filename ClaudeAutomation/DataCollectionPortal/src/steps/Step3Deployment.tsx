@@ -89,12 +89,9 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
     }
     const stem = fileStem(file.name);
     const autoLevels = mockLevels(stem);
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      set({ shapefileDataUrl: ev.target?.result as string });
-    };
-    reader.readAsDataURL(file);
-    set({
+
+    // Apply the sync fields immediately so the UI shows the uploaded file
+    const syncPatch: Partial<DeploymentConfig> = {
       shapefileName: file.name,
       hierarchyName: localHierarchyName || stem,
       hierarchyLevels: autoLevels,
@@ -102,7 +99,20 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
       uploadMethod: "shapefile",
       operatingLevel: autoLevels.length - 1,
       boundaryProcessed: false,
-    });
+    };
+    set(syncPatch);
+
+    // The reader.onload callback closes over the OLD `d`, so spreading it alone
+    // would overwrite the sync patch above. Re-apply syncPatch + shapefileDataUrl
+    // together so both updates share the same base without conflicts.
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      set({ ...syncPatch, shapefileDataUrl: ev.target?.result as string });
+    };
+    reader.onerror = () => {
+      setShapefileError("Failed to read the file. Please try again.");
+    };
+    reader.readAsDataURL(file);
   };
 
   const updateLevel = (id: string, name: string) =>
