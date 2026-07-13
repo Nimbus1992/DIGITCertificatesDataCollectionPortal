@@ -1,5 +1,7 @@
 import { useState } from "react";
 import type { ImplementationConfig, FormConfig, FormDocument, CustomFormField, FieldType, DeploymentConfig } from "../types";
+import { RECOMMENDED_SECTIONS } from "../lib/formFieldComputer";
+import type { RecommendedSection } from "../lib/formFieldComputer";
 import { StepWrapper } from "./StepWrapper";
 import { Plus, Trash2, Lock, Info, Pencil, AlertTriangle } from "lucide-react";
 
@@ -13,116 +15,6 @@ interface Props {
   onSaveDraft: () => Promise<void>;
 }
 
-interface RecommendedField {
-  name: string;
-  fieldType: FieldType;
-  mandatory: boolean;
-  validation: string;
-  removable: boolean;
-}
-
-interface RecommendedSubsection {
-  name: string; // "" means no label
-  fields: RecommendedField[];
-}
-
-interface RecommendedSection {
-  id: string;
-  title: string;
-  borderColor: string;
-  canAddFields: boolean;
-  canAddSubsections: boolean;
-  subsections: RecommendedSubsection[];
-}
-
-// ── Hardcoded recommended sections ───────────────────────────────────────────
-
-// All recommended fields support inline editing except ID Type (managed via chips)
-
-const RECOMMENDED_SECTIONS: RecommendedSection[] = [
-  {
-    id: "applicant",
-    title: "Applicant Details",
-    borderColor: "border-blue-500",
-    canAddFields: true,
-    canAddSubsections: false,
-    subsections: [
-      {
-        name: "",
-        fields: [
-          { name: "Full Name",     fieldType: "text",     mandatory: true,  validation: "Min 3 characters", removable: false },
-          { name: "Mobile Number", fieldType: "phone",    mandatory: true,  validation: "10-digit number",  removable: false },
-          { name: "Email Address", fieldType: "email",    mandatory: false, validation: "—",                      removable: false },
-          { name: "ID Type",       fieldType: "dropdown", mandatory: true,  validation: "From accepted ID types",  removable: false },
-          { name: "ID Number",     fieldType: "text",     mandatory: true,  validation: "—",                      removable: false },
-        ],
-      },
-      {
-        name: "Applicant Address",
-        fields: [
-          { name: "House No / Apartment Name", fieldType: "text", mandatory: true,  validation: "—",              removable: false },
-          { name: "Address Line 1",            fieldType: "text", mandatory: true,  validation: "—",              removable: false },
-          { name: "Address Line 2",            fieldType: "text", mandatory: false, validation: "—",              removable: false },
-          { name: "Postal Code",               fieldType: "text", mandatory: true,  validation: "6-digit number", removable: false },
-        ],
-      },
-    ],
-  },
-  {
-    id: "business",
-    title: "Business Details",
-    borderColor: "border-emerald-500",
-    canAddFields: true,
-    canAddSubsections: true,
-    subsections: [
-      {
-        name: "General",
-        fields: [
-          { name: "Business / Trade Name",        fieldType: "text",     mandatory: true,  validation: "Min 3 characters",           removable: false },
-          { name: "Trade Category",               fieldType: "dropdown", mandatory: true,  validation: "—",  removable: false },
-          { name: "Sub-category",                 fieldType: "dropdown", mandatory: true,  validation: "—",  removable: false },
-          { name: "Business Registration Number", fieldType: "text",     mandatory: false, validation: "15-char alphanumeric",        removable: true  },
-          { name: "Tax Identification Number",    fieldType: "text",     mandatory: false, validation: "10-char alphanumeric",        removable: true  },
-          { name: "Year of Establishment",        fieldType: "year",     mandatory: true,  validation: "—",                          removable: false },
-        ],
-      },
-      {
-        name: "Business Address",
-        fields: [
-          { name: "House No / Apartment Name", fieldType: "text", mandatory: true,  validation: "—",              removable: false },
-          { name: "Address Line 1",            fieldType: "text", mandatory: true,  validation: "—",              removable: false },
-          { name: "Address Line 2",            fieldType: "text", mandatory: false, validation: "—",              removable: false },
-          { name: "Postal Code",               fieldType: "text", mandatory: true,  validation: "6-digit number", removable: false },
-        ],
-      },
-      {
-        name: "Operations Details",
-        fields: [
-          { name: "Business Area",          fieldType: "number",   mandatory: true,  validation: "In sq ft, min 1", removable: false },
-          { name: "Number of Employees",    fieldType: "number",   mandatory: true,  validation: "Min 1",           removable: false },
-          { name: "Operating Hours",        fieldType: "text",     mandatory: false, validation: "—",               removable: true  },
-          { name: "Is Business Hazardous?", fieldType: "dropdown", mandatory: true,  validation: "Yes / No",        removable: false },
-        ],
-      },
-    ],
-  },
-  {
-    id: "declaration",
-    title: "Declaration",
-    borderColor: "border-amber-500",
-    canAddFields: false,
-    canAddSubsections: false,
-    subsections: [
-      {
-        name: "",
-        fields: [
-          { name: "I declare all information provided is true", fieldType: "checkbox", mandatory: true, validation: "—", removable: false },
-          { name: "I agree to the Terms and Conditions",        fieldType: "checkbox", mandatory: true, validation: "—", removable: false },
-        ],
-      },
-    ],
-  },
-];
 
 const FIELD_TYPES: FieldType[] = [
   "text", "number", "date", "year", "dropdown", "phone",

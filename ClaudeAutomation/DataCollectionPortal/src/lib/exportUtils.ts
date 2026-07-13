@@ -1,4 +1,5 @@
 import type { ImplementationConfig } from "../types";
+import { computeEffectiveFields } from "./formFieldComputer";
 
 export function exportAsJson(config: ImplementationConfig): void {
   const blob = new Blob([JSON.stringify(config, null, 2)], { type: "application/json" });
@@ -102,6 +103,7 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
 
   const { account: a, branding: b, deployment: d, formConfig: f, roles, fees, paymentsNotifications: pn, integrations: integ, overall: oc, workflow: wf } = config;
   const sym = fees.currencySymbol || a.currencySymbol || "₹";
+  const effectiveFields = f.effectiveFields?.length ? f.effectiveFields : computeEffectiveFields(f);
 
   // ── Header bar ───────────────────────────────────────────────────────────────
   doc.setFillColor(248, 250, 252);
@@ -166,16 +168,21 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
   addRow("Messaging & Notifications", "Enabled via mSeva (Email, SMS, Push)");
   addRow("Verifiable Credentials",    "Enabled via DIVOC");
 
-  addSubSection("Configured");
-  addBool("eSign",              integ.eSignEnabled);
-  if (integ.eSignEnabled && integ.eSignProvider) addRow("eSign Provider", integ.eSignProvider);
-  addBool("DigiLocker",         integ.digiLockerEnabled);
-  addBool("GSTIN Verification", integ.gstinVerificationEnabled);
-  addBool("Aadhaar OTP",        integ.aadhaarOtpEnabled);
-  addBool("Online Payment",     integ.onlinePaymentEnabled);
-  if (integ.onlinePaymentEnabled && integ.paymentGatewayDetails) {
-    addRow("Gateway Details", integ.paymentGatewayDetails);
+  const enabledIntegrations: string[] = [];
+  if (integ.eSignEnabled) enabledIntegrations.push(`eSign${integ.eSignProvider ? ` (${integ.eSignProvider})` : ""}`);
+  if (integ.digiLockerEnabled) enabledIntegrations.push("DigiLocker");
+  if (integ.gstinVerificationEnabled) enabledIntegrations.push("GSTIN Verification");
+  if (integ.aadhaarOtpEnabled) enabledIntegrations.push("Aadhaar OTP");
+  if (integ.onlinePaymentEnabled) enabledIntegrations.push(`Online Payment${integ.paymentGatewayDetails ? ` (${integ.paymentGatewayDetails})` : ""}`);
+
+  if (enabledIntegrations.length > 0) {
+    addSubSection("Enabled Integrations");
+    enabledIntegrations.forEach((i) => addRow(i, "Enabled"));
+  } else {
+    addSubSection("Configured Integrations");
+    addRow("Optional integrations", "None enabled");
   }
+
   if (integ.customIntegrations.length > 0) {
     addSubSection("Custom Integrations");
     addTable(
@@ -237,19 +244,47 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
   addRow("Accepted ID Types",    f.idTypes.join(", ") || "—");
   addBool("Declaration OTP (Mobile)", f.declarationMobileOtpEnabled);
 
+  const formSections = [
+    { id: "applicant", title: "Applicant Details" },
+    { id: "business",  title: "Business Details" },
+    { id: "declaration", title: "Declaration" },
+  ];
+
+  for (const { id, title } of formSections) {
+    const sFields = effectiveFields.filter((x) => x.sectionId === id);
+    if (!sFields.length) continue;
+    addSubSection(title);
+    const subsections = [...new Set(sFields.map((x) => x.subsectionName))];
+    for (const subName of subsections) {
+      const subFields = sFields.filter((x) => x.subsectionName === subName);
+      if (subName) {
+        checkPage(6);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "italic");
+        doc.setTextColor(100, 116, 139);
+        doc.text(subName, margin + 2, y);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(0, 0, 0);
+        y += 5;
+      }
+      addTable(
+        ["Field", "Type", "Required", "Notes"],
+        subFields.map((ef) => [
+          ef.name + (ef.isRecommended ? "" : " ☆"),
+          ef.fieldType,
+          ef.mandatory ? "Required" : "Optional",
+          ef.validation === "—" ? "" : (ef.validation ?? ""),
+        ]),
+        [60, 25, 25, 60]
+      );
+    }
+  }
+
   if (f.documents.length > 0) {
     addSubSection("Documents");
     addTable(
       ["Document", "Required", "Formats"],
       f.documents.map((docItem) => [docItem.name, docItem.required ? "Yes" : "No", docItem.formats.join(", ")])
-    );
-  }
-
-  if (f.customFields.length > 0) {
-    addSubSection("Custom Fields");
-    addTable(
-      ["Field", "Section", "Type", "Required"],
-      f.customFields.map((cf) => [cf.name, cf.subsectionName || cf.sectionId, cf.fieldType, cf.mandatory ? "Yes" : "No"])
     );
   }
 
@@ -309,15 +344,22 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
 
   // ── 9. Workflow ──────────────────────────────────────────────────────────────
   addSection("9. Workflow");
+  addSubSection("Overall Settings");
+  addRow("Processing SLA", `${wf.processingSlaDays} day${wf.processingSlaDays !== 1 ? "s" : ""}`);
+  if (oc.renewalEnabled) {
+    addRow("Renewal Reminder", `${wf.renewalReminderDays} day${wf.renewalReminderDays !== 1 ? "s" : ""} before expiry`);
+  }
+  addRow("Allow Citizen Withdrawal", wf.allowCitizenWithdrawal ? "Yes" : "No");
+
   addSubSection("Issuance Stages");
   if (wf.stages.length > 0) {
     addTable(
-      ["Stage", "Actor", "Actions", "SLA (hrs)"],
+      ["From State", "Actor", "Action", "To State"],
       wf.stages.map((s) => [
         s.name + (s.isStart ? " [Start]" : s.isEnd ? " [End]" : ""),
         s.actor,
         s.actions.map((ac) => ac.label).join(", ") || "—",
-        s.slaHours === 0 ? "—" : String(s.slaHours),
+        s.actions.map((ac) => ac.nextStateId).join(", ") || "—",
       ])
     );
   }
@@ -354,12 +396,12 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
   if (oc.renewalEnabled && (wf.renewalStages ?? []).length > 0) {
     addSubSection("Renewal Stages");
     addTable(
-      ["Stage", "Actor", "Actions", "SLA (hrs)"],
+      ["From State", "Actor", "Action", "To State"],
       (wf.renewalStages ?? []).map((s) => [
-        s.name,
+        s.name + (s.isStart ? " [Start]" : s.isEnd ? " [End]" : ""),
         s.actor,
         s.actions.map((ac) => ac.label).join(", ") || "—",
-        s.slaHours === 0 ? "—" : String(s.slaHours),
+        s.actions.map((ac) => ac.nextStateId).join(", ") || "—",
       ])
     );
   }
@@ -395,6 +437,17 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
       ["Stage", "Channel", "Recipient", "Message"],
       wfNotifs
     );
+  }
+
+  // ── 11. Other Information ────────────────────────────────────────────────────
+  if (config.notes?.trim()) {
+    addSection("11. Other Information");
+    const noteLines = doc.splitTextToSize(config.notes.trim(), cW);
+    checkPage(noteLines.length * 5 + 5);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(noteLines, margin, y);
+    y += noteLines.length * 5 + 3;
   }
 
   // Footer

@@ -54,6 +54,18 @@ export interface TradeCategory {
 
 // ── Form Config ──────────────────────────────────────────────────────────────
 
+export interface EffectiveFormField {
+  sectionId: string;
+  sectionTitle: string;
+  subsectionName: string;
+  name: string;
+  fieldType: string;
+  mandatory: boolean;
+  validation: string;
+  isRecommended: boolean;
+  dropdownOptions?: string[];
+}
+
 export type FieldType =
   | "text" | "number" | "date" | "year" | "dropdown" | "phone"
   | "email" | "textarea" | "checkbox" | "file";
@@ -88,6 +100,7 @@ export interface FormConfig {
   deletedRecommendedFields: string[];
   editedRecommendedFields: Record<string, { name?: string; fieldType?: string; mandatory?: boolean; validation?: string }>;
   declarationMobileOtpEnabled: boolean;
+  effectiveFields?: EffectiveFormField[];
 }
 
 // ── Roles ────────────────────────────────────────────────────────────────────

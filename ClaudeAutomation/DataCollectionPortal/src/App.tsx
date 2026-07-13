@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import type { ImplementationConfig } from "./types";
 import { DEFAULT_CONFIG, STORAGE_KEY, STEP_KEY, OVERALL_Q_INDEX_KEY, CATEGORIES_CLEARED_KEY } from "./defaults";
 import { saveConfig, type AccountRecord } from "./lib/supabase";
+import { computeEffectiveFields } from "./lib/formFieldComputer";
 
 // Persists which steps have been completed (user clicked Next/Save past them)
 const COMPLETED_STEPS_KEY = "blp_completed_steps";
@@ -225,6 +226,10 @@ export default function App() {
   const saveDraft = useCallback(async () => {
     const draftConfig: ImplementationConfig = {
       ...config,
+      formConfig: {
+        ...config.formConfig,
+        effectiveFields: computeEffectiveFields(config.formConfig),
+      },
       metadata: {
         ...config.metadata,
         status: "draft",

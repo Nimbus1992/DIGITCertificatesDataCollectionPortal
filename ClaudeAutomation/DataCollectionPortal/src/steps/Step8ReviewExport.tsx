@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ImplementationConfig } from "../types";
 import { exportAsJson, exportAsPdf } from "../lib/exportUtils";
+import { computeEffectiveFields } from "../lib/formFieldComputer";
 import { exportConfigToExcel } from "../lib/exportExcel";
 import { saveConfig } from "../lib/supabase";
 import {
@@ -136,6 +137,7 @@ export default function Step8ReviewExport({
 
   const { account: a, branding: b, deployment: d, formConfig: f, roles, fees, paymentsNotifications: pn, integrations: integ, overall: oc, workflow: wf } = config;
   const sym = fees.currencySymbol || a.currencySymbol || "₹";
+  const effectiveFields = f.effectiveFields?.length ? f.effectiveFields : computeEffectiveFields(f);
 
   // ── Completion checker grouped by section ────────────────────────────────────
   const requiredSections = [
@@ -428,19 +430,25 @@ export default function Step8ReviewExport({
           <AlwaysOn label="Verifiable Credentials" detail="DIVOC-based credential issuance" />
 
           <SubHeading text="Configured Integrations" />
-          <DRBool label="eSign" value={integ.eSignEnabled} />
-          {integ.eSignEnabled && integ.eSignProvider && (
-            <DR label="eSign Provider" value={integ.eSignProvider} />
-          )}
-          <DRBool label="DigiLocker" value={integ.digiLockerEnabled} />
-          <DRBool label="GSTIN Verification" value={integ.gstinVerificationEnabled} />
-          <DRBool label="Aadhaar OTP" value={integ.aadhaarOtpEnabled} />
-          <DRBool label="Online Payment" value={integ.onlinePaymentEnabled} />
-          {integ.onlinePaymentEnabled && integ.paymentGatewayPreference && (
-            <DR label="Payment Gateway Preference" value={integ.paymentGatewayPreference} />
-          )}
-          {integ.onlinePaymentEnabled && integ.paymentGatewayDetails && (
-            <DR label="Payment Gateway Details" value={integ.paymentGatewayDetails} />
+          {!integ.eSignEnabled && !integ.digiLockerEnabled && !integ.gstinVerificationEnabled && !integ.aadhaarOtpEnabled && !integ.onlinePaymentEnabled && integ.customIntegrations.length === 0 ? (
+            <span className="text-xs text-slate-400">No optional integrations enabled</span>
+          ) : (
+            <>
+              {integ.eSignEnabled && (
+                <>
+                  <AlwaysOn label="eSign" detail={integ.eSignProvider ? `Provider: ${integ.eSignProvider}` : undefined} />
+                </>
+              )}
+              {integ.digiLockerEnabled && <AlwaysOn label="DigiLocker" />}
+              {integ.gstinVerificationEnabled && <AlwaysOn label="GSTIN Verification" />}
+              {integ.aadhaarOtpEnabled && <AlwaysOn label="Aadhaar OTP" />}
+              {integ.onlinePaymentEnabled && (
+                <AlwaysOn
+                  label="Online Payment"
+                  detail={integ.paymentGatewayDetails || integ.paymentGatewayPreference || undefined}
+                />
+              )}
+            </>
           )}
 
           {integ.customIntegrations.length > 0 && (
@@ -522,36 +530,66 @@ export default function Step8ReviewExport({
           </div>
           <DRBool label="Declaration OTP (Mobile)" value={f.declarationMobileOtpEnabled} />
 
-          <SubHeading text="Documents" />
-          {f.documents.length === 0 ? (
-            <span className="text-xs text-slate-400">No documents configured</span>
-          ) : (
-            <MiniTable
-              cols={["Document", "Required", "Formats", "Sub-types"]}
-              rows={f.documents.map((doc) => [
-                doc.name,
-                doc.required ? "Yes" : "No",
-                doc.formats.join(", "),
-                doc.hasDocTypeDropdown && doc.docTypes.length > 0
-                  ? doc.docTypes.join(", ")
-                  : "—",
-              ])}
-            />
+          {(() => {
+            const sections = [
+              { id: "applicant", title: "Applicant Details" },
+              { id: "business",  title: "Business Details" },
+              { id: "declaration", title: "Declaration" },
+            ];
+            return sections.map(({ id, title }) => {
+              const sFields = effectiveFields.filter((x) => x.sectionId === id);
+              if (!sFields.length) return null;
+              const subsections = [...new Set(sFields.map((x) => x.subsectionName))];
+              return (
+                <div key={id}>
+                  <SubHeading text={title} />
+                  {subsections.map((subName) => {
+                    const subFields = sFields.filter((x) => x.subsectionName === subName);
+                    return (
+                      <div key={subName ?? "_root"}>
+                        {subName && (
+                          <p className="text-xs font-semibold text-slate-500 mt-2 mb-1 pl-1">{subName}</p>
+                        )}
+                        <MiniTable
+                          cols={["Field", "Type", "Required", "Notes"]}
+                          rows={subFields.map((ef) => [
+                            ef.name + (ef.isRecommended ? "" : " ❆"),
+                            ef.fieldType,
+                            ef.mandatory ? "Required" : "Optional",
+                            ef.validation === "—" ? "" : (ef.validation ?? ""),
+                          ])}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            });
+          })()}
+
+          {(f.customSubsections ?? []).length > 0 && (
+            <div className="flex items-start gap-3 text-sm mt-1">
+              <span className="text-slate-500 w-48 shrink-0">Custom Subsections</span>
+              <TagList items={f.customSubsections} />
+            </div>
           )}
 
-          {f.customFields.length > 0 && (
+          {f.documents.length > 0 && (
             <>
-              <SubHeading text="Custom Fields" />
+              <SubHeading text="Documents" />
               <MiniTable
-                cols={["Field", "Section", "Type", "Required"]}
-                rows={f.customFields.map((cf) => [
-                  cf.name,
-                  cf.subsectionName || cf.sectionId,
-                  cf.fieldType,
-                  cf.mandatory ? "Yes" : "No",
+                cols={["Document", "Required", "Formats", "Sub-types"]}
+                rows={f.documents.map((doc) => [
+                  doc.name,
+                  doc.required ? "Yes" : "No",
+                  doc.formats.join(", "),
+                  doc.hasDocTypeDropdown && doc.docTypes.length > 0 ? doc.docTypes.join(", ") : "—",
                 ])}
               />
             </>
+          )}
+          {f.documents.length === 0 && (
+            <span className="text-xs text-slate-400">No documents configured</span>
           )}
         </ReviewSection>
 
@@ -571,7 +609,7 @@ export default function Step8ReviewExport({
                     <div className="flex flex-col gap-0.5">
                       {members.map((m, i) => (
                         <span key={i} className="text-slate-700 text-xs">
-                          {m.name} — {m.email}
+                          {m.name}{m.mobile ? ` · ${m.mobile}` : ""}{m.email ? ` · ${m.email}` : ""}
                         </span>
                       ))}
                       {emails.filter((e) => !members.find((m) => m.email === e)).map((e, i) => (
@@ -661,17 +699,24 @@ export default function Step8ReviewExport({
 
         {/* 9. Workflow */}
         <ReviewSection title="9. Workflow" onEdit={() => onGoToStep(9)}>
+          <SubHeading text="Overall Settings" />
+          <DR label="Overall Processing SLA" value={`${wf.processingSlaDays} day${wf.processingSlaDays !== 1 ? "s" : ""}`} />
+          {oc.renewalEnabled && (
+            <DR label="Renewal Reminder" value={`${wf.renewalReminderDays} day${wf.renewalReminderDays !== 1 ? "s" : ""} before expiry`} />
+          )}
+          <DRBool label="Allow Citizen Withdrawal" value={wf.allowCitizenWithdrawal} />
+
           <SubHeading text="Issuance Workflow" />
           {wf.stages.length === 0 ? (
             <span className="text-xs text-amber-600">No stages configured</span>
           ) : (
             <MiniTable
-              cols={["Stage", "Actor", "Actions", "SLA (hrs)"]}
+              cols={["From State", "Actor", "Action", "To State"]}
               rows={wf.stages.map((s) => [
                 s.name + (s.isStart ? " [Start]" : s.isEnd ? " [End]" : ""),
                 s.actor,
                 s.actions.map((a) => a.label).join(", ") || "—",
-                s.slaHours === 0 ? "—" : String(s.slaHours),
+                s.actions.map((a) => a.nextStateId).join(", ") || "—",
               ])}
             />
           )}
@@ -687,9 +732,7 @@ export default function Step8ReviewExport({
                     <div key={cl.id} className="border border-slate-200 rounded-lg p-3">
                       <p className="text-xs font-semibold text-slate-700 mb-1">
                         {cl.name}
-                        {stage && (
-                          <span className="text-slate-400 font-normal ml-2">({stage.name})</span>
-                        )}
+                        {stage && <span className="text-slate-400 font-normal ml-2">({stage.name})</span>}
                       </p>
                       {cl.questions.length === 0 ? (
                         <span className="text-xs text-slate-400">No questions</span>
@@ -700,9 +743,7 @@ export default function Step8ReviewExport({
                               <span className="text-slate-400">{qi + 1}.</span>
                               <span>{q.label}</span>
                               <span className="text-slate-400">({q.fieldType})</span>
-                              {q.required && (
-                                <span className="text-xs text-red-500">*</span>
-                              )}
+                              {q.required && <span className="text-xs text-red-500">*</span>}
                             </li>
                           ))}
                         </ul>
@@ -714,7 +755,6 @@ export default function Step8ReviewExport({
             </>
           )}
 
-          {/* Fallback to flat checklistItems if no named checklists */}
           {(wf.checklists ?? []).length === 0 && wf.checklistItems.length > 0 && (
             <>
               <SubHeading text="Checklist Items" />
@@ -732,12 +772,12 @@ export default function Step8ReviewExport({
             <>
               <SubHeading text="Renewal Workflow" />
               <MiniTable
-                cols={["Stage", "Actor", "Actions", "SLA (hrs)"]}
+                cols={["From State", "Actor", "Action", "To State"]}
                 rows={(wf.renewalStages ?? []).map((s) => [
                   s.name + (s.isStart ? " [Start]" : s.isEnd ? " [End]" : ""),
                   s.actor,
                   s.actions.map((a) => a.label).join(", ") || "—",
-                  s.slaHours === 0 ? "—" : String(s.slaHours),
+                  s.actions.map((a) => a.nextStateId).join(", ") || "—",
                 ])}
               />
             </>
@@ -788,6 +828,13 @@ export default function Step8ReviewExport({
             </>
           )}
         </ReviewSection>
+
+        {/* 11. Other Information */}
+        {config.notes?.trim() && (
+          <ReviewSection title="11. Other Information" onEdit={() => onGoToStep(12)}>
+            <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{config.notes}</p>
+          </ReviewSection>
+        )}
       </div>
 
       {/* Export / Save actions */}
