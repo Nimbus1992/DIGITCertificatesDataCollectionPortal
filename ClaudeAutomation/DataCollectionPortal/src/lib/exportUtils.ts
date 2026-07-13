@@ -165,8 +165,10 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
   // ── 4. Integrations ──────────────────────────────────────────────────────────
   addSection("4. Integrations");
   addSubSection("Always-On Platform Services");
-  addRow("Messaging & Notifications", "Enabled via mSeva (Email, SMS, Push)");
-  addRow("Verifiable Credentials",    "Enabled via DIVOC");
+  addRow("SMS",                    "Amazon SNS");
+  addRow("Email",                  "Amazon SES");
+  addRow("USSD",                   "Africa's Talking");
+  addRow("Verifiable Credentials", "Vault");
 
   const enabledIntegrations: string[] = [];
   if (integ.eSignEnabled) enabledIntegrations.push(`eSign${integ.eSignProvider ? ` (${integ.eSignProvider})` : ""}`);
@@ -243,6 +245,27 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
   addSection("6. Application Form");
   addRow("Accepted ID Types",    f.idTypes.join(", ") || "—");
   addBool("Declaration OTP (Mobile)", f.declarationMobileOtpEnabled);
+
+  addSubSection("Owner / Proprietor Details");
+  addTable(
+    ["Field", "Type", "Required"],
+    [
+      ["Owner Type", "dropdown", "Required"],
+      ["Full Name (Individual)", "text", "Required"],
+      ["Mobile (Individual)", "phone", "Required"],
+      ["Email (Individual)", "email", "Optional"],
+      ["ID Type (Individual)", "dropdown", "Required"],
+      ["ID Number (Individual)", "text", "Required"],
+      ["Institution Type (Organisation)", "dropdown", "Required"],
+      ["Institution Subtype (Organisation)", "dropdown", "Required"],
+      ["Organisation Name", "text", "Required"],
+      ["Representative Name", "text", "Required"],
+      ["Mobile (Organisation)", "phone", "Required"],
+      ["Email (Organisation)", "email", "Optional"],
+      ["ID Type (Organisation)", "dropdown", "Required"],
+      ["ID Number (Organisation)", "text", "Required"],
+    ]
+  );
 
   const formSections = [
     { id: "applicant", title: "Applicant Details" },
@@ -345,11 +368,18 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
   // ── 9. Workflow ──────────────────────────────────────────────────────────────
   addSection("9. Workflow");
   addSubSection("Overall Settings");
-  addRow("Processing SLA", `${wf.processingSlaDays} day${wf.processingSlaDays !== 1 ? "s" : ""}`);
+  const appSla = wf.applicationProcessingSlaDays ?? wf.processingSlaDays;
+  addRow("Application Processing SLA", `${appSla} day${appSla !== 1 ? "s" : ""}`);
   if (oc.renewalEnabled) {
+    const renSla = wf.renewalProcessingSlaDays ?? wf.processingSlaDays;
+    addRow("Renewal Processing SLA", `${renSla} day${renSla !== 1 ? "s" : ""}`);
     addRow("Renewal Reminder", `${wf.renewalReminderDays} day${wf.renewalReminderDays !== 1 ? "s" : ""} before expiry`);
   }
   addRow("Allow Citizen Withdrawal", wf.allowCitizenWithdrawal ? "Yes" : "No");
+
+  // Resolve To State — try ID lookup first, fall back to stored value
+  const resolveToStatePdf = (stages: typeof wf.stages, id: string) =>
+    stages.find(s => s.id === id)?.name ?? id;
 
   addSubSection("Issuance Stages");
   if (wf.stages.length > 0) {
@@ -359,7 +389,7 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
         s.name + (s.isStart ? " [Start]" : s.isEnd ? " [End]" : ""),
         s.actor,
         s.actions.map((ac) => ac.label).join(", ") || "—",
-        s.actions.map((ac) => ac.nextStateId).join(", ") || "—",
+        s.actions.map((ac) => resolveToStatePdf(wf.stages, ac.nextStateId)).join(", ") || "—",
       ])
     );
   }
@@ -401,16 +431,13 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
         s.name + (s.isStart ? " [Start]" : s.isEnd ? " [End]" : ""),
         s.actor,
         s.actions.map((ac) => ac.label).join(", ") || "—",
-        s.actions.map((ac) => ac.nextStateId).join(", ") || "—",
+        s.actions.map((ac) => resolveToStatePdf(wf.renewalStages ?? [], ac.nextStateId)).join(", ") || "—",
       ])
     );
   }
 
   // ── 10. Notifications ────────────────────────────────────────────────────────
   addSection("10. Notifications");
-  addRow("Payment Gateway",
-    pn.paymentGateway === "custom" ? pn.customGatewayName : pn.paymentGateway);
-  addBool("Counter Payments", pn.counterPaymentsEnabled);
   if (pn.adminEmail) addRow("Admin Email", pn.adminEmail);
   if (pn.smsSenderId) addRow("SMS Sender ID", pn.smsSenderId);
   const channels = Object.entries(pn.notificationChannels)
@@ -419,23 +446,16 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
     .join(", ");
   addRow("Notification Channels", channels || "None");
 
-  if (pn.notificationTemplates.length > 0) {
-    addSubSection("Notification Templates");
+  const allNotifsPdf: string[][] = [
+    ...pn.notificationTemplates.map((t) => [t.event, t.channel.toUpperCase(), t.recipient, t.subject]),
+    ...wf.stages.flatMap((s) => s.notifications.map((n) => [n.event ?? s.name, n.channel.toUpperCase(), n.recipient, n.subject])),
+    ...(wf.renewalStages ?? []).flatMap((s) => s.notifications.map((n) => [n.event ?? s.name, n.channel.toUpperCase(), n.recipient, n.subject])),
+  ];
+  if (allNotifsPdf.length > 0) {
+    addSubSection("Notification Messages");
     addTable(
-      ["Event", "Channel", "Recipient", "Subject"],
-      pn.notificationTemplates.map((t) => [t.event, t.channel.toUpperCase(), t.recipient, t.subject])
-    );
-  }
-
-  // Workflow notifications
-  const wfNotifs = wf.stages.flatMap((stage) =>
-    stage.notifications.map((n) => [stage.name, n.channel.toUpperCase(), n.recipient, n.subject])
-  );
-  if (wfNotifs.length > 0) {
-    addSubSection("Workflow Notifications");
-    addTable(
-      ["Stage", "Channel", "Recipient", "Message"],
-      wfNotifs
+      ["Event / State", "Channel", "Recipient", "Message"],
+      allNotifsPdf
     );
   }
 

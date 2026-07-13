@@ -934,7 +934,7 @@ export default function StepWorkflow({ config, updateConfig, onNext, onBack, onS
   const [activeTab, setActiveTab] = useState<"application" | "renewal">("application");
 
   // ── Advanced settings ─────────────────────────────────────────────────────
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(true);
 
   // ── Clear confirm ─────────────────────────────────────────────────────────
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -1151,41 +1151,47 @@ export default function StepWorkflow({ config, updateConfig, onNext, onBack, onS
           {advancedOpen && (
             <div className="mt-4 bg-slate-50 rounded-xl border border-slate-200 p-5 space-y-5">
 
-              {/* Processing SLA */}
+              {/* Processing SLA — per tab */}
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-700">Processing SLA (days)</p>
-                  <p className="text-xs text-slate-400">Target days to complete an application end-to-end.</p>
+                  <p className="text-sm font-medium text-slate-700">
+                    {isRenewalTab ? "Renewal Processing SLA (days)" : "Application Processing SLA (days)"}
+                  </p>
+                  <p className="text-xs text-slate-400">Target days to complete the {isRenewalTab ? "renewal" : "application"} end-to-end.</p>
                 </div>
                 <input
                   type="number"
                   min={1}
                   max={90}
-                  value={wf.processingSlaDays}
-                  onChange={e => updateWf("processingSlaDays", Math.max(1, parseInt(e.target.value) || 1))}
-                  className={`px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white w-20 text-center`}
+                  value={isRenewalTab
+                    ? (wf.renewalProcessingSlaDays ?? wf.processingSlaDays)
+                    : (wf.applicationProcessingSlaDays ?? wf.processingSlaDays)}
+                  onChange={e => {
+                    const v = Math.max(1, parseInt(e.target.value) || 1);
+                    if (isRenewalTab) updateWf("renewalProcessingSlaDays", v);
+                    else updateWf("applicationProcessingSlaDays", v);
+                  }}
+                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white w-20 text-center"
                 />
               </div>
 
-              {/* Fix #4: Auto-escalate removed from UI (autoEscalate remains false in save path) */}
-
-              {/* Renewal reminder */}
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-slate-700">Renewal reminder (days before expiry)</p>
-                  <p className="text-xs text-slate-400">Citizens notified this many days before their licence expires.</p>
+              {/* Renewal reminder — renewal tab only */}
+              {isRenewalTab && (
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-slate-700">Renewal reminder (days before expiry)</p>
+                    <p className="text-xs text-slate-400">Citizens notified this many days before their licence expires.</p>
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={180}
+                    value={wf.renewalReminderDays}
+                    onChange={e => updateWf("renewalReminderDays", Math.max(1, parseInt(e.target.value) || 1))}
+                    className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white w-20 text-center"
+                  />
                 </div>
-                <input
-                  type="number"
-                  min={1}
-                  max={180}
-                  value={wf.renewalReminderDays}
-                  onChange={e => updateWf("renewalReminderDays", Math.max(1, parseInt(e.target.value) || 1))}
-                  className={`px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white w-20 text-center`}
-                />
-              </div>
-
-              {/* Fix #5: Allow citizen withdrawal removed from UI */}
+              )}
 
             </div>
           )}

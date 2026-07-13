@@ -1,11 +1,10 @@
 import { useState } from "react";
-import type { ImplementationConfig } from "../types";
-import { exportAsJson, exportAsPdf } from "../lib/exportUtils";
+import type { ImplementationConfig, WorkflowStage } from "../types";
+import { exportAsPdf } from "../lib/exportUtils";
 import { computeEffectiveFields } from "../lib/formFieldComputer";
-import { exportConfigToExcel } from "../lib/exportExcel";
 import { saveConfig } from "../lib/supabase";
 import {
-  CheckCircle2, FileJson, FileText, FileSpreadsheet,
+  CheckCircle2, FileText,
   Cloud, Pencil, ArrowLeft, Send, AlertCircle, Download,
   XCircle,
 } from "lucide-react";
@@ -139,6 +138,10 @@ export default function Step8ReviewExport({
   const sym = fees.currencySymbol || a.currencySymbol || "₹";
   const effectiveFields = f.effectiveFields?.length ? f.effectiveFields : computeEffectiveFields(f);
 
+  // Resolve To State name — try ID lookup first, fall back to stored value
+  const resolveToState = (stages: WorkflowStage[], id: string) =>
+    stages.find(s => s.id === id)?.name ?? id;
+
   // ── Completion checker grouped by section ────────────────────────────────────
   const requiredSections = [
     {
@@ -250,16 +253,12 @@ export default function Step8ReviewExport({
     });
   })();
 
-  // ── Workflow notifications (collected from all stages) ───────────────────────
-  const wfNotifRows = wf.stages.flatMap((stage) =>
-    stage.notifications.map((n) => [
-      stage.name,
-      n.event ?? stage.name,
-      n.channel.toUpperCase(),
-      n.recipient,
-      n.subject,
-    ])
-  );
+  // ── Merged notification rows (templates + workflow stage notifications) ───────
+  const allNotifRows: string[][] = [
+    ...pn.notificationTemplates.map((t) => [t.event, t.channel.toUpperCase(), t.recipient, t.subject]),
+    ...wf.stages.flatMap((s) => s.notifications.map((n) => [n.event ?? s.name, n.channel.toUpperCase(), n.recipient, n.subject])),
+    ...(wf.renewalStages ?? []).flatMap((s) => s.notifications.map((n) => [n.event ?? s.name, n.channel.toUpperCase(), n.recipient, n.subject])),
+  ];
 
   // ── Custom fee table columns ─────────────────────────────────────────────────
   const feeTableCols =
@@ -426,8 +425,10 @@ export default function Step8ReviewExport({
         {/* 4. Integrations */}
         <ReviewSection title="4. Integrations" onEdit={() => onGoToStep(4)}>
           <SubHeading text="Always-On (Platform Services)" />
-          <AlwaysOn label="Messaging & Notifications" detail="Email, SMS, Push via mSeva" />
-          <AlwaysOn label="Verifiable Credentials" detail="DIVOC-based credential issuance" />
+          <AlwaysOn label="SMS" detail="Amazon SNS" />
+          <AlwaysOn label="Email" detail="Amazon SES" />
+          <AlwaysOn label="USSD" detail="Africa's Talking" />
+          <AlwaysOn label="Verifiable Credentials" detail="Vault" />
 
           <SubHeading text="Configured Integrations" />
           {!integ.eSignEnabled && !integ.digiLockerEnabled && !integ.gstinVerificationEnabled && !integ.aadhaarOtpEnabled && !integ.onlinePaymentEnabled && integ.customIntegrations.length === 0 ? (
@@ -567,6 +568,27 @@ export default function Step8ReviewExport({
             });
           })()}
 
+          <SubHeading text="Owner / Proprietor Details" />
+          <MiniTable
+            cols={["Field", "Type", "Required"]}
+            rows={[
+              ["Owner Type", "dropdown", "Required"],
+              ["Full Name (Individual)", "text", "Required"],
+              ["Mobile (Individual)", "phone", "Required"],
+              ["Email (Individual)", "email", "Optional"],
+              ["ID Type (Individual)", "dropdown", "Required"],
+              ["ID Number (Individual)", "text", "Required"],
+              ["Institution Type (Organisation)", "dropdown", "Required"],
+              ["Institution Subtype (Organisation)", "dropdown", "Required"],
+              ["Organisation Name", "text", "Required"],
+              ["Representative Name", "text", "Required"],
+              ["Mobile (Organisation)", "phone", "Required"],
+              ["Email (Organisation)", "email", "Optional"],
+              ["ID Type (Organisation)", "dropdown", "Required"],
+              ["ID Number (Organisation)", "text", "Required"],
+            ]}
+          />
+
           {(f.customSubsections ?? []).length > 0 && (
             <div className="flex items-start gap-3 text-sm mt-1">
               <span className="text-slate-500 w-48 shrink-0">Custom Subsections</span>
@@ -700,7 +722,16 @@ export default function Step8ReviewExport({
         {/* 9. Workflow */}
         <ReviewSection title="9. Workflow" onEdit={() => onGoToStep(9)}>
           <SubHeading text="Overall Settings" />
-          <DR label="Overall Processing SLA" value={`${wf.processingSlaDays} day${wf.processingSlaDays !== 1 ? "s" : ""}`} />
+          <DR
+            label="Application Processing SLA"
+            value={`${wf.applicationProcessingSlaDays ?? wf.processingSlaDays} day${(wf.applicationProcessingSlaDays ?? wf.processingSlaDays) !== 1 ? "s" : ""}`}
+          />
+          {oc.renewalEnabled && (
+            <DR
+              label="Renewal Processing SLA"
+              value={`${wf.renewalProcessingSlaDays ?? wf.processingSlaDays} day${(wf.renewalProcessingSlaDays ?? wf.processingSlaDays) !== 1 ? "s" : ""}`}
+            />
+          )}
           {oc.renewalEnabled && (
             <DR label="Renewal Reminder" value={`${wf.renewalReminderDays} day${wf.renewalReminderDays !== 1 ? "s" : ""} before expiry`} />
           )}
@@ -716,7 +747,7 @@ export default function Step8ReviewExport({
                 s.name + (s.isStart ? " [Start]" : s.isEnd ? " [End]" : ""),
                 s.actor,
                 s.actions.map((a) => a.label).join(", ") || "—",
-                s.actions.map((a) => a.nextStateId).join(", ") || "—",
+                s.actions.map((a) => resolveToState(wf.stages, a.nextStateId)).join(", ") || "—",
               ])}
             />
           )}
@@ -777,7 +808,7 @@ export default function Step8ReviewExport({
                   s.name + (s.isStart ? " [Start]" : s.isEnd ? " [End]" : ""),
                   s.actor,
                   s.actions.map((a) => a.label).join(", ") || "—",
-                  s.actions.map((a) => a.nextStateId).join(", ") || "—",
+                  s.actions.map((a) => resolveToState(wf.renewalStages ?? [], a.nextStateId)).join(", ") || "—",
                 ])}
               />
             </>
@@ -786,12 +817,6 @@ export default function Step8ReviewExport({
 
         {/* 10. Notifications */}
         <ReviewSection title="10. Notifications" onEdit={() => onGoToStep(10)}>
-          <SubHeading text="Payment Gateway" />
-          <DR
-            label="Gateway"
-            value={pn.paymentGateway === "custom" ? pn.customGatewayName : pn.paymentGateway}
-          />
-          <DRBool label="Counter Payments" value={pn.counterPaymentsEnabled} />
           <DR label="Admin Email" value={pn.adminEmail} />
           <DR label="SMS Sender ID" value={pn.smsSenderId} />
           <div className="flex items-start gap-3 text-sm">
@@ -803,29 +828,17 @@ export default function Step8ReviewExport({
             />
           </div>
 
-          {pn.notificationTemplates.length > 0 && (
+          {allNotifRows.length > 0 && (
             <>
-              <SubHeading text="Notification Templates" />
+              <SubHeading text="Notification Messages" />
               <MiniTable
-                cols={["Event", "Channel", "Recipient", "Subject"]}
-                rows={pn.notificationTemplates.map((t) => [
-                  t.event,
-                  t.channel.toUpperCase(),
-                  t.recipient,
-                  t.subject,
-                ])}
+                cols={["Event / State", "Channel", "Recipient", "Message"]}
+                rows={allNotifRows}
               />
             </>
           )}
-
-          {wfNotifRows.length > 0 && (
-            <>
-              <SubHeading text="Workflow Notifications" />
-              <MiniTable
-                cols={["Stage", "Event", "Channel", "Recipient", "Message"]}
-                rows={wfNotifRows}
-              />
-            </>
+          {allNotifRows.length === 0 && (
+            <span className="text-xs text-slate-400">No notification messages configured</span>
           )}
         </ReviewSection>
 
@@ -841,15 +854,7 @@ export default function Step8ReviewExport({
       <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
         <p className="text-sm font-semibold text-slate-800 mb-1">Export & Save</p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <button
-            onClick={() => exportAsJson(config)}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-slate-200 hover:border-blue-300 hover:bg-blue-50 transition-colors text-sm font-medium text-slate-700"
-          >
-            <FileJson size={18} className="text-blue-500" />
-            Download JSON
-          </button>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             onClick={handleExportPdf}
             disabled={exporting}
@@ -857,14 +862,6 @@ export default function Step8ReviewExport({
           >
             <FileText size={18} className="text-purple-500" />
             {exporting ? "Generating..." : "Download PDF"}
-          </button>
-
-          <button
-            onClick={() => exportConfigToExcel(config)}
-            className="flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-emerald-200 hover:border-emerald-400 hover:bg-emerald-50 transition-colors text-sm font-medium text-slate-700"
-          >
-            <FileSpreadsheet size={18} className="text-emerald-600" />
-            Export as Excel
           </button>
 
           <button
@@ -880,7 +877,7 @@ export default function Step8ReviewExport({
             ) : (
               <>
                 <Send size={16} />
-                Submit to Database
+                Submit to eGov
               </>
             )}
           </button>

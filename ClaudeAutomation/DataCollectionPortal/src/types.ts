@@ -308,6 +308,8 @@ export interface WorkflowChecklist {
 export interface WorkflowConfig {
   approvalLevels: number;
   processingSlaDays: number;
+  applicationProcessingSlaDays?: number;
+  renewalProcessingSlaDays?: number;
   autoEscalate: boolean;
   escalationAfterDays: number;
   renewalReminderDays: number;
