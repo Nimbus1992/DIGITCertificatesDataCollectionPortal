@@ -379,17 +379,42 @@ function WorkflowTable({ rows, checklists, roleNames, config, onSetRows, onSetCh
                   >
                     {/* From State */}
                     <td className="px-4 py-2.5 min-w-0">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <input
-                          type="text"
-                          value={row.name}
-                          onChange={e => updateRow(row.id, { name: e.target.value })}
-                          placeholder="e.g. Start"
-                          className="w-full min-w-0 text-sm text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-400 focus:outline-none py-0.5 transition-colors"
-                        />
-                        {row.isStart && (
-                          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-100 text-blue-600">start</span>
-                        )}
+                      <input
+                        type="text"
+                        value={row.name}
+                        onChange={e => updateRow(row.id, { name: e.target.value })}
+                        placeholder="e.g. Start"
+                        className="w-full min-w-0 text-sm text-slate-800 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-blue-400 focus:outline-none py-0.5 transition-colors mb-1"
+                      />
+                      <div className="flex gap-1">
+                        <button
+                          type="button"
+                          onClick={() => updateRow(row.id, { isStart: !row.isStart })}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium transition-colors ${
+                            row.isStart
+                              ? "bg-blue-600 text-white"
+                              : "bg-slate-100 text-slate-400 hover:bg-blue-50 hover:text-blue-600"
+                          }`}
+                        >
+                          Start
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nowEnd = !row.isEnd;
+                            updateRow(row.id, {
+                              isEnd: nowEnd,
+                              actions: nowEnd ? [] : [{ id: uid(), label: "", nextStateId: "", color: "default" }],
+                            });
+                          }}
+                          className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium transition-colors ${
+                            row.isEnd
+                              ? "bg-emerald-600 text-white"
+                              : "bg-slate-100 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600"
+                          }`}
+                        >
+                          End
+                        </button>
                       </div>
                     </td>
 
@@ -1039,10 +1064,17 @@ export default function StepWorkflow({ config, updateConfig, onNext, onBack, onS
           </div>
         )}
 
-        {/* ── Renewal auto-approve banner ─────────────────────────────────── */}
+        {/* ── Renewal auto-all banner (no workflow needed) ────────────────── */}
+        {activeTab === "renewal" && renewalEnabled && renewalApprovalMode === "auto_all" && (
+          <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800">
+            <strong>All renewals are automatically approved</strong> — no manual workflow is needed. This tab is for reference only; the workflow table below will not be used.
+          </div>
+        )}
+
+        {/* ── Renewal auto-if-unchanged banner ────────────────────────────── */}
         {activeTab === "renewal" && renewalEnabled && renewalApprovalMode === "auto_if_unchanged" && (
           <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-800">
-            Renewal is set to auto-approve if the application is unchanged. The workflow below only applies when changes are detected.
+            <strong>Auto-approve if unchanged.</strong> The workflow below only runs when the applicant makes changes to their renewal application.
           </div>
         )}
 
