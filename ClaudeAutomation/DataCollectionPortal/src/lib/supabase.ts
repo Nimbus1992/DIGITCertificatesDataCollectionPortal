@@ -142,6 +142,10 @@ export async function saveConfig(
       ...config.branding,
       logoUrl: config.branding.logoUrl?.startsWith("data:") ? "__has_logo__" : config.branding.logoUrl,
     },
+    deployment: {
+      ...config.deployment,
+      shapefileDataUrl: config.deployment.shapefileDataUrl?.startsWith("data:") ? "__has_shapefile__" : (config.deployment.shapefileDataUrl ?? ""),
+    },
     overall: { ...config.overall, categories: deduplicatedCategories },
     metadata: { ...config.metadata, lastStep: currentStep },
   };

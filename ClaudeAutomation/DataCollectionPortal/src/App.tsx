@@ -175,7 +175,23 @@ export default function App() {
     return DEFAULT_CONFIG;
   });
 
-  useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(config)); }, [config]);
+  // Strip large binary data URLs before saving to localStorage to avoid quota errors.
+  // Both logo and shapefile are stored under their own keys and restored on load.
+  useEffect(() => {
+    const stripped = {
+      ...config,
+      deployment: { ...config.deployment, shapefileDataUrl: undefined },
+      branding: {
+        ...config.branding,
+        logoUrl: config.branding.logoUrl?.startsWith("data:") ? "__has_logo__" : config.branding.logoUrl,
+      },
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stripped));
+    } catch {
+      // Quota exceeded — silently ignore; in-memory state is still intact
+    }
+  }, [config]);
   useEffect(() => { localStorage.setItem(STEP_KEY, String(currentStep)); }, [currentStep]);
 
   // ── Logo persistence — saved separately so Supabase stripping doesn't lose it ─
@@ -183,9 +199,18 @@ export default function App() {
     const logo = config.branding.logoUrl;
     const orgKey = config.account.organizationName;
     if (logo?.startsWith("data:") && orgKey) {
-      localStorage.setItem(`blp_logo_${orgKey}`, logo);
+      try { localStorage.setItem(`blp_logo_${orgKey}`, logo); } catch { /* quota */ }
     }
   }, [config.branding.logoUrl, config.account.organizationName]);
+
+  // ── Shapefile persistence — saved separately to avoid blowing localStorage quota ─
+  useEffect(() => {
+    const shapefile = config.deployment.shapefileDataUrl;
+    const orgKey = config.account.organizationName;
+    if (shapefile?.startsWith("data:") && orgKey) {
+      try { localStorage.setItem(`blp_shapefile_${orgKey}`, shapefile); } catch { /* quota */ }
+    }
+  }, [config.deployment.shapefileDataUrl, config.account.organizationName]);
 
   const updateConfig = useCallback(<K extends keyof ImplementationConfig>(
     key: K, value: ImplementationConfig[K]
@@ -289,6 +314,18 @@ export default function App() {
     return loaded;
   }
 
+  /** Restores the shapefile data URL from its own localStorage key. */
+  function restoreShapefile(loaded: ImplementationConfig): ImplementationConfig {
+    const orgKey = loaded.account.organizationName;
+    if (!orgKey) return loaded;
+    if (loaded.deployment.shapefileDataUrl?.startsWith("data:")) return loaded;
+    const saved = localStorage.getItem(`blp_shapefile_${orgKey}`);
+    if (saved?.startsWith("data:")) {
+      return { ...loaded, deployment: { ...loaded.deployment, shapefileDataUrl: saved } };
+    }
+    return loaded;
+  }
+
   /** Reset per-step localStorage keys so every account always starts each section from question 1. */
   function resetStepLocalState() {
     localStorage.setItem(OVERALL_Q_INDEX_KEY, "0");
@@ -299,7 +336,7 @@ export default function App() {
     setIsAdmin(false);
     setOpenedFromAdmin(false);
     setSuperUserAccount(account);
-    const loaded = restoreLogo(applyMigrations(account.config_data ?? DEFAULT_CONFIG));
+    const loaded = restoreShapefile(restoreLogo(applyMigrations(account.config_data ?? DEFAULT_CONFIG)));
     setConfig(loaded);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
     const step = Math.max(1, Math.min(account.current_step ?? 1, TOTAL_STEPS));
@@ -317,7 +354,7 @@ export default function App() {
     setIsAdmin(false);
     setOpenedFromAdmin(true);
     setSuperUserAccount(account);
-    const loaded = restoreLogo(applyMigrations(account.config_data ?? DEFAULT_CONFIG));
+    const loaded = restoreShapefile(restoreLogo(applyMigrations(account.config_data ?? DEFAULT_CONFIG)));
     setConfig(loaded);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
     const step = Math.max(1, Math.min(account.current_step ?? 1, TOTAL_STEPS));
