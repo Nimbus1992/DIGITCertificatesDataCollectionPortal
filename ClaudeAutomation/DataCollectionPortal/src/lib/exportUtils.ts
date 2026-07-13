@@ -138,7 +138,6 @@ export async function exportAsPdf(config: ImplementationConfig): Promise<void> {
   addRow("Department",        a.departmentName);
   addRow("Country",           `${a.country}${a.stateProvince ? `, ${a.stateProvince}` : ""}`);
   addRow("Currency",          `${a.currency} (${sym})`);
-  addRow("Language",          a.language);
   addRow("Date Format",       a.dateFormat);
   addRow("Financial Year Start", a.financialYearStart);
   addRow("Mobile Prefix",     a.mobilePrefix);

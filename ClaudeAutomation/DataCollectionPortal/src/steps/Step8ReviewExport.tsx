@@ -333,7 +333,6 @@ export default function Step8ReviewExport({
           <DR label="Department" value={a.departmentName} />
           <DR label="Country" value={`${a.country}${a.stateProvince ? `, ${a.stateProvince}` : ""}`} />
           <DR label="Currency" value={`${a.currency} (${sym})`} />
-          <DR label="Language" value={a.language} />
           <DR label="Date Format" value={a.dateFormat} />
           <DR label="Financial Year Start" value={a.financialYearStart} />
           <DR label="Mobile Prefix" value={a.mobilePrefix} />

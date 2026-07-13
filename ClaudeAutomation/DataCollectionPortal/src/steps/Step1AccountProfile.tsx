@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { ImplementationConfig, AccountProfile } from "../types";
 import {
-  COUNTRY_OPTIONS, LANGUAGE_OPTIONS, CURRENCY_OPTIONS,
+  COUNTRY_OPTIONS, CURRENCY_OPTIONS,
   MOBILE_PREFIX_OPTIONS, COUNTRY_TO_PREFIX,
 } from "../defaults";
 import { StepWrapper } from "./StepWrapper";
@@ -179,18 +179,6 @@ export default function Step1AccountProfile({ config, updateConfig, onNext, onBa
                 ))}
               </select>
               <p className="text-xs text-slate-400 mt-1">Symbol: {selectedCurrency?.symbol}</p>
-            </Field>
-
-            <Field label="Language">
-              <select
-                className={inputCls}
-                value={a.language}
-                onChange={(e) => set("language", e.target.value)}
-              >
-                {LANGUAGE_OPTIONS.map((l) => (
-                  <option key={l} value={l}>{l}</option>
-                ))}
-              </select>
             </Field>
 
             <Field label="Date Format">
