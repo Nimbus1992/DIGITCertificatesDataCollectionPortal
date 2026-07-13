@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import type {
   ImplementationConfig,
   FeesConfig,
@@ -100,18 +100,38 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
   const f = config.fees;
   const set = (patch: Partial<FeesConfig>) => updateConfig("fees", { ...f, ...patch });
 
-  // Currency
+  // Currency — always read from account settings; fall back to stored fees symbol only if account not yet configured
   const accountSymbol = config.account.currencySymbol;
   const accountCurrency = config.account.currency;
   const hasCurrency = !!(accountCurrency && accountSymbol);
-  const sym = hasCurrency ? accountSymbol : (f.currencySymbol || "₹");
+  const sym = accountSymbol || f.currencySymbol || "";
 
-  // Sync currency from account
-  if (hasCurrency && (f.currency !== accountCurrency || f.currencySymbol !== accountSymbol)) {
-    set({ currency: accountCurrency, currencySymbol: accountSymbol });
-  }
+  // Sync account currency into fees config so review/export pages read the correct value
+  useEffect(() => {
+    if (accountCurrency && accountSymbol) {
+      updateConfig("fees", { ...config.fees, currency: accountCurrency, currencySymbol: accountSymbol });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountCurrency, accountSymbol]);
 
   const renewalEnabled = config.overall.renewalEnabled === true;
+  const isFinancialYear = (config.overall.licenseValidityMode ?? "fixed") === "financial_year";
+
+  // Validation state
+  const [feeError, setFeeError] = useState<string | null>(null);
+
+  const handleNext = useCallback(() => {
+    if (f.feeMode === "flat" && (!f.flatFeeAmount || f.flatFeeAmount <= 0)) {
+      setFeeError("Application flat fee must be greater than zero.");
+      return;
+    }
+    if (renewalEnabled && (f.renewalFeeMode ?? "flat") === "flat" && (!f.renewalFlatFeeAmount || f.renewalFlatFeeAmount <= 0)) {
+      setFeeError("Renewal flat fee must be greater than zero. Set an amount or change to a different fee mode.");
+      return;
+    }
+    setFeeError(null);
+    onNext();
+  }, [f.feeMode, f.flatFeeAmount, f.renewalFeeMode, f.renewalFlatFeeAmount, renewalEnabled, onNext]);
 
   // Active tab
   const [activeTab, setActiveTab] = useState<FeeTab>("application");
@@ -293,13 +313,20 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
       step={8}
       title="Fee Configuration"
       subtitle="Define how citizens are charged for their Business License application."
-      onNext={onNext}
+      onNext={handleNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
       summaryItems={feesSummaryItems}
       nextSectionLabel="Configure Notifications"
     >
       <div className="space-y-5">
+        {/* Fee validation error */}
+        {feeError && (
+          <div className="flex items-start gap-3 bg-red-50 border border-red-300 rounded-xl px-4 py-3">
+            <AlertCircle size={15} className="text-red-500 shrink-0 mt-0.5" />
+            <p className="text-sm text-red-700">{feeError}</p>
+          </div>
+        )}
 
         {/* Currency notice */}
         {!hasCurrency ? (
@@ -307,13 +334,33 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
             <AlertCircle size={15} className="text-amber-600 shrink-0 mt-0.5" />
             <p className="text-xs text-amber-700">
               <strong>Currency not set.</strong> Go to <span className="font-semibold">Account Overview (Step 1)</span> and fill in the Currency field.
-              Showing <strong>₹ INR</strong> as a placeholder for now.
+              No currency symbol will be shown until you configure one in Account Settings.
             </p>
           </div>
         ) : (
           <div className="flex items-center gap-2 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5">
             <span className="text-base font-bold text-slate-700">{sym}</span>
             <span>All fees are in <strong>{accountCurrency}</strong>, pulled from Account Overview.</span>
+          </div>
+        )}
+
+        {/* Proration toggle — shown only when financial year validity mode is active */}
+        {isFinancialYear && (
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex items-start gap-4">
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-slate-800">Prorate fees for mid-year applicants?</p>
+              <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                Since your licence is valid for the financial year, someone who applies mid-year gets fewer months of coverage.
+                If <strong>Yes</strong>, the platform will charge a proportional fee based on remaining months in the year.
+                If <strong>No</strong>, the full fee applies regardless of when in the year the licence is issued.
+              </p>
+            </div>
+            <button
+              onClick={() => set({ prorateFees: !(f.prorateFees ?? false) })}
+              className={`relative inline-flex h-6 w-11 rounded-full transition-colors shrink-0 mt-0.5 ${f.prorateFees ? "bg-blue-600" : "bg-slate-300"}`}
+            >
+              <span className={`inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform mt-0.5 ${f.prorateFees ? "translate-x-5" : "translate-x-0.5"}`} />
+            </button>
           </div>
         )}
 
@@ -373,12 +420,16 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
                   <p className="text-sm font-semibold text-slate-800">Total Fee Amount</p>
                   <p className="text-xs text-slate-500 mt-0.5">Single fee charged to all applicants upon submission</p>
                 </div>
-                <div className="relative max-w-xs">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">{sym}</span>
+                <div className="flex items-center max-w-xs rounded-lg border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                  {sym && (
+                    <span className="px-3 py-2.5 text-sm font-medium text-slate-500 bg-slate-50 border-r border-slate-200 shrink-0 select-none">
+                      {sym}
+                    </span>
+                  )}
                   <input
                     type="number"
                     min={0}
-                    className={`${inputCls} pl-8 w-full`}
+                    className="flex-1 px-3 py-2.5 text-sm text-slate-900 bg-transparent focus:outline-none min-w-0"
                     value={f.flatFeeAmount || ""}
                     placeholder="0"
                     onChange={(e) => set({ flatFeeAmount: Number(e.target.value) })}
@@ -498,12 +549,16 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
                       <p className="text-sm font-semibold text-slate-800">Total Renewal Fee Amount</p>
                       <p className="text-xs text-slate-500 mt-0.5">Single fee charged to all applicants upon renewal submission</p>
                     </div>
-                    <div className="relative max-w-xs">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">{sym}</span>
+                    <div className="flex items-center max-w-xs rounded-lg border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                      {sym && (
+                        <span className="px-3 py-2.5 text-sm font-medium text-slate-500 bg-slate-50 border-r border-slate-200 shrink-0 select-none">
+                          {sym}
+                        </span>
+                      )}
                       <input
                         type="number"
                         min={0}
-                        className={`${inputCls} pl-8 w-full`}
+                        className="flex-1 px-3 py-2.5 text-sm text-slate-900 bg-transparent focus:outline-none min-w-0"
                         value={f.renewalFlatFeeAmount ?? ""}
                         placeholder="0"
                         onChange={(e) => set({ renewalFlatFeeAmount: Number(e.target.value) })}
@@ -589,6 +644,26 @@ export default function Step6Fees({ config, updateConfig, onNext, onBack, onSave
       </div>
     </StepWrapper>
   );
+}
+
+// ── Slab gap detector ────────────────────────────────────────────────────────
+
+function detectSlabGaps(slabs: CustomFeeSlabEntry[]): { from: number; to: number }[] {
+  if (slabs.length < 1) return [];
+  const sorted = [...slabs].sort((a, b) => a.lowerBound - b.lowerBound);
+  const gaps: { from: number; to: number }[] = [];
+
+  if (sorted[0].lowerBound > 0) {
+    gaps.push({ from: 0, to: sorted[0].lowerBound });
+  }
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const upper = sorted[i].upperBound;
+    const nextLower = sorted[i + 1].lowerBound;
+    if (upper < nextLower) {
+      gaps.push({ from: upper, to: nextLower });
+    }
+  }
+  return gaps;
 }
 
 // ── Shared fee-table builder ──────────────────────────────────────────────────
@@ -855,21 +930,20 @@ function SlabConfigStep({ selectedFields, slabEnabled, slabs, onToggleSlabEnable
           {supportsSlab(field.fieldType) && slabEnabled[field.id] && (
             <div className="p-4 space-y-2">
               <p className="text-xs text-slate-500">
-                Define the numeric ranges for each slab. The label is auto-generated from the bounds but can be overridden.
-                Fee amounts are configured in the next step.
+                Define the numeric ranges for each slab and give each one a name. Leave the label blank to use the auto-generated range (e.g. "0–100").
+                Fee amounts are set in the next step.
               </p>
 
               {/* Table header */}
               <div className="grid grid-cols-[120px_120px_1fr_32px] bg-slate-50 border border-slate-200 rounded-lg overflow-hidden text-xs font-semibold text-slate-500 uppercase tracking-wide">
                 <span className="px-3 py-2">Lower Bound</span>
                 <span className="px-3 py-2">Upper Bound</span>
-                <span className="px-3 py-2">Label (auto)</span>
+                <span className="px-3 py-2">Label</span>
                 <span className="px-3 py-2" />
               </div>
 
               {(slabs[field.id] ?? []).map((slab, idx) => {
                 const autoLabel = `${slab.lowerBound ?? 0}–${slab.upperBound ?? 0}`;
-                const displayLabel = slab.label || autoLabel;
                 return (
                   <div key={idx} className="grid grid-cols-[120px_120px_1fr_32px] items-center gap-1 border border-slate-200 rounded-lg overflow-hidden">
                     <input
@@ -878,11 +952,7 @@ function SlabConfigStep({ selectedFields, slabEnabled, slabs, onToggleSlabEnable
                       className="px-3 py-2.5 text-sm border-r border-slate-100 focus:outline-none focus:bg-blue-50 bg-transparent"
                       placeholder="0"
                       value={slab.lowerBound ?? ""}
-                      onChange={(e) => {
-                        const lb = Number(e.target.value);
-                        const newLabel = slab.label ? slab.label : `${lb}–${slab.upperBound ?? 0}`;
-                        onUpdateSlab(field.id, idx, { lowerBound: lb, label: newLabel });
-                      }}
+                      onChange={(e) => onUpdateSlab(field.id, idx, { lowerBound: Number(e.target.value) })}
                     />
                     <input
                       type="number"
@@ -890,17 +960,15 @@ function SlabConfigStep({ selectedFields, slabEnabled, slabs, onToggleSlabEnable
                       className="px-3 py-2.5 text-sm border-r border-slate-100 focus:outline-none focus:bg-blue-50 bg-transparent"
                       placeholder="100"
                       value={slab.upperBound || ""}
-                      onChange={(e) => {
-                        const ub = Number(e.target.value);
-                        const newLabel = slab.label ? slab.label : `${slab.lowerBound ?? 0}–${ub}`;
-                        onUpdateSlab(field.id, idx, { upperBound: ub, label: newLabel });
-                      }}
+                      onChange={(e) => onUpdateSlab(field.id, idx, { upperBound: Number(e.target.value) })}
                     />
-                    <div className="px-3 py-2.5 flex items-center gap-1.5">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 border border-blue-200 text-xs font-mono text-blue-700 shrink-0">
-                        {displayLabel}
-                      </span>
-                    </div>
+                    <input
+                      type="text"
+                      value={slab.label}
+                      placeholder={autoLabel}
+                      onChange={(e) => onUpdateSlab(field.id, idx, { label: e.target.value })}
+                      className="px-3 py-2.5 text-sm border-r border-slate-100 focus:outline-none focus:bg-blue-50 bg-transparent placeholder:text-slate-300 placeholder:italic w-full min-w-0"
+                    />
                     <div className="flex items-center justify-center">
                       {(slabs[field.id] ?? []).length > 1 ? (
                         <button onClick={() => onRemoveSlab(field.id, idx)} className="text-slate-300 hover:text-red-500 transition-colors p-1">
@@ -918,6 +986,29 @@ function SlabConfigStep({ selectedFields, slabEnabled, slabs, onToggleSlabEnable
               >
                 <Plus size={12} /> Add slab
               </button>
+
+              {/* Gap detection warning */}
+              {(() => {
+                const gaps = detectSlabGaps(slabs[field.id] ?? []);
+                if (gaps.length === 0) return null;
+                return (
+                  <div className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 mt-2">
+                    <AlertCircle size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-semibold text-amber-700">Gaps in slab coverage — please verify</p>
+                      <p className="text-xs text-amber-600">
+                        The following ranges are not covered by any slab:{" "}
+                        {gaps.map((g, i) => (
+                          <span key={i} className="font-mono mx-0.5 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded text-amber-800">
+                            {g.from}–{g.to}
+                          </span>
+                        ))}
+                      </p>
+                      <p className="text-xs text-amber-500">You can still proceed — this is just a reminder to check your slab coverage.</p>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -1016,12 +1107,16 @@ function FeeTableStep({ tableRows, selectedFields, sym, onUpdateRowFee, onBack, 
                     </td>
                   ))}
                   <td className="px-4 py-2.5">
-                    <div className="relative w-32">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">{sym}</span>
+                    <div className={`flex items-center rounded-lg border overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 min-w-[90px] ${cellIsZero ? "border-red-400" : "border-slate-200"}`}>
+                      {sym && (
+                        <span className={`px-2 py-1.5 text-xs text-slate-500 shrink-0 border-r select-none ${cellIsZero ? "bg-red-50 border-red-200" : "bg-slate-50 border-slate-200"}`}>
+                          {sym}
+                        </span>
+                      )}
                       <input
                         type="number"
                         min={0}
-                        className={`w-full pl-7 pr-2 py-1.5 text-sm border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${cellIsZero ? "border-red-400 bg-red-50" : "border-slate-200"}`}
+                        className={`flex-1 px-2 py-1.5 text-sm focus:outline-none min-w-0 ${cellIsZero ? "bg-red-50" : "bg-white"}`}
                         value={feeVal || ""}
                         placeholder="0"
                         onChange={(e) => onUpdateRowFee(ridx, Number(e.target.value))}
@@ -1216,14 +1311,14 @@ function AdditionalFeeComponents({
                 <option value="flat">Flat amount</option>
                 <option value="percentage">Percentage (%)</option>
               </select>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
-                  {comp.type === "flat" ? sym : "%"}
+              <div className="flex items-center rounded-lg border border-slate-300 bg-white overflow-hidden focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500">
+                <span className="px-3 py-2.5 text-sm text-slate-500 bg-slate-50 border-r border-slate-200 shrink-0 select-none">
+                  {comp.type === "flat" ? (sym || "—") : "%"}
                 </span>
                 <input
                   type="number"
                   min={0}
-                  className={`${inputCls} pl-8 w-full`}
+                  className="flex-1 px-3 py-2.5 text-sm text-slate-900 bg-transparent focus:outline-none min-w-0"
                   placeholder="0"
                   value={comp.value || ""}
                   onChange={(e) => onUpdate(comp.id, { value: Number(e.target.value) })}

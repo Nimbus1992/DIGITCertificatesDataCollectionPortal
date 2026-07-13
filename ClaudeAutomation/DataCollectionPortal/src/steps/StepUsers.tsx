@@ -65,6 +65,40 @@ export default function StepUsers({ config, updateConfig, onNext, onBack, onSave
     setDrafts((prev) => ({ ...prev, [roleId]: { ...EMPTY_DRAFT } }));
   }
 
+  // Auto-commit any non-empty drafts before the summary is shown.
+  // Batches all pending drafts into a single updateConfig call to avoid
+  // React's state-batching dropping all but the last individual updateRole call.
+  function flushDrafts() {
+    let updatedRoles = [...roles];
+    let anyCommitted = false;
+
+    staffRoles.forEach((role) => {
+      const draft = drafts[role.id];
+      if (!draft) return;
+      const name  = draft.name.trim();
+      const email = draft.email.trim();
+      if (!name && !email) return;
+      const mobile = draft.mobile.trim();
+      const newMember: StaffMember = {
+        id: `${role.id}_${Date.now()}`,
+        name,
+        mobile,
+        email,
+      };
+      updatedRoles = updatedRoles.map((r) =>
+        r.id === role.id
+          ? { ...r, staffMembers: [...(r.staffMembers ?? []), newMember] }
+          : r
+      );
+      anyCommitted = true;
+    });
+
+    if (anyCommitted) {
+      updateConfig("roles", updatedRoles);
+      setDrafts(Object.fromEntries(staffRoles.map((r) => [r.id, { ...EMPTY_DRAFT }])));
+    }
+  }
+
   function removeUser(roleId: string, memberId: string) {
     const role = roles.find((r) => r.id === roleId);
     if (!role) return;
@@ -81,13 +115,15 @@ export default function StepUsers({ config, updateConfig, onNext, onBack, onSave
   const usersSummaryItems = [
     {
       label: "Total Staff Assigned",
-      value: `${totalAssigned} staff member${totalAssigned !== 1 ? "s" : ""} across ${staffRoles.length} role${staffRoles.length !== 1 ? "s" : ""}`,
+      value: `${totalAssigned} member${totalAssigned !== 1 ? "s" : ""} across ${staffRoles.length} role${staffRoles.length !== 1 ? "s" : ""}`,
     },
-    ...staffRoles.slice(0, 5).map((r) => ({
+    ...staffRoles.map((r) => ({
       label: r.name,
       value: (r.staffMembers?.length ?? 0) > 0
-        ? `${r.staffMembers!.length} assigned`
-        : "No users assigned",
+        ? r.staffMembers!.map((m) =>
+            [m.name, m.email].filter(Boolean).join(" · ") || "Unnamed"
+          )
+        : ["No users assigned"],
     })),
   ];
 
@@ -101,6 +137,7 @@ export default function StepUsers({ config, updateConfig, onNext, onBack, onSave
       onSaveDraft={onSaveDraft}
       summaryItems={usersSummaryItems}
       nextSectionLabel="Review & Export"
+      onBeforeSummary={flushDrafts}
     >
       <div className="space-y-5">
         <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex gap-3">

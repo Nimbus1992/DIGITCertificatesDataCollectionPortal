@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import type { ImplementationConfig, OverallConfig, CategoryEntry } from "../types";
 import { StepWrapper } from "./StepWrapper";
-import { ChevronLeft, ChevronRight, Plus, Trash2, CheckCircle2, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Upload, Download } from "lucide-react";
-import { OVERALL_Q_INDEX_KEY, CATEGORIES_CLEARED_KEY } from "../defaults";
+import { ChevronLeft, ChevronRight, Plus, Trash2, CheckCircle2, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Upload, Download, RotateCcw } from "lucide-react";
+import { OVERALL_Q_INDEX_KEY, CATEGORIES_CLEARED_KEY, DEFAULT_CONFIG } from "../defaults";
 
 interface Props {
   config: ImplementationConfig;
@@ -25,22 +25,29 @@ function OptionCard({
       onClick={locked ? undefined : onClick}
       className={`flex items-start justify-between gap-3 px-4 py-4 rounded-xl border transition-all ${
         locked
-          ? "border-slate-200 bg-slate-50 cursor-default"
+          ? "border-green-200 bg-green-50 cursor-default"
           : selected
           ? "border-blue-400 bg-blue-50 cursor-pointer"
           : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40 cursor-pointer"
       }`}
     >
       <div className="flex-1">
-        <p className={`text-sm font-medium ${locked ? "text-slate-500" : selected ? "text-blue-800" : "text-slate-800"}`}>
-          {label}
-        </p>
+        <div className="flex items-center gap-2">
+          <p className={`text-sm font-medium ${locked ? "text-green-800" : selected ? "text-blue-800" : "text-slate-800"}`}>
+            {label}
+          </p>
+          {locked && (
+            <span className="text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 font-medium border border-green-200">
+              Always On
+            </span>
+          )}
+        </div>
         {description && (
           <p className="text-xs text-slate-500 mt-0.5">{description}</p>
         )}
       </div>
       <div className={`w-5 h-5 rounded-full border-2 mt-0.5 shrink-0 flex items-center justify-center transition-all ${
-        locked ? "border-slate-300 bg-slate-100" :
+        locked ? "border-green-400 bg-green-400" :
         selected ? "border-blue-500 bg-blue-500" : "border-slate-300"
       }`}>
         {(selected || locked) && <div className="w-2 h-2 rounded-full bg-white" />}
@@ -111,6 +118,7 @@ export default function StepOverallConfig({ config, updateConfig, onNext, onBack
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [confirmClearAll, setConfirmClearAll] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
   const [categoriesCleared, setCategoriesCleared] = useState(() =>
     localStorage.getItem(CATEGORIES_CLEARED_KEY) === "true"
   );
@@ -143,11 +151,9 @@ export default function StepOverallConfig({ config, updateConfig, onNext, onBack
 
   function addCategory() {
     if (!newRow.level1.trim()) return;
-    const isDuplicate = oc.categories.some(
-      (c) =>
-        c.level1.trim().toLowerCase() === newRow.level1.trim().toLowerCase() &&
-        c.level2.trim().toLowerCase() === newRow.level2.trim().toLowerCase() &&
-        c.level3.trim().toLowerCase() === newRow.level3.trim().toLowerCase()
+    const keys = (["level1", "level2", "level3"] as const).slice(0, L);
+    const isDuplicate = oc.categories.some((c) =>
+      keys.every((k) => c[k].trim().toLowerCase() === newRow[k].trim().toLowerCase())
     );
     if (isDuplicate) { setDuplicateError(true); return; }
     setDuplicateError(false);
@@ -430,6 +436,17 @@ export default function StepOverallConfig({ config, updateConfig, onNext, onBack
           oc.categories.filter((c) => !newRow.level2 || c.level2 === newRow.level2).map((c) => c.level3).filter(Boolean)
         )];
 
+        // Deduplicate by visible levels so L=1 doesn't show the same level1 multiple times
+        const displayRows = (() => {
+          const seen = new Set<string>();
+          return sortedCategories.filter((cat) => {
+            const key = colKeys.map((k) => cat[k].trim().toLowerCase()).join("\0");
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+        })();
+
         return (
           <div className="space-y-4">
             {/* Recommended notice — hidden permanently once user clears */}
@@ -479,23 +496,62 @@ export default function StepOverallConfig({ config, updateConfig, onNext, onBack
               </div>
             )}
 
+            {/* Reset to defaults confirmation */}
+            {confirmReset && (
+              <div className="flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3">
+                <p className="text-sm text-amber-800 font-medium">
+                  Replace the current list with the recommended default categories?
+                </p>
+                <div className="flex items-center gap-3 shrink-0">
+                  <button
+                    onClick={() => {
+                      const fresh = DEFAULT_CONFIG.overall.categories.map((c) => ({ ...c, id: uid() }));
+                      update("categories", fresh);
+                      setConfirmReset(false);
+                      setConfirmDeleteId(null);
+                      setCategoriesCleared(false);
+                      localStorage.setItem(CATEGORIES_CLEARED_KEY, "false");
+                    }}
+                    className="text-xs font-semibold text-white bg-amber-600 hover:bg-amber-700 px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    Yes, reset
+                  </button>
+                  <button
+                    onClick={() => setConfirmReset(false)}
+                    className="text-xs text-slate-500 hover:text-slate-700 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Toolbar */}
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex items-center justify-between gap-2">
               <button
-                onClick={downloadTemplate}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
-                title="Download CSV template"
+                onClick={() => { setConfirmReset(true); setConfirmClearAll(false); }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-amber-200 text-xs text-amber-700 hover:bg-amber-50 transition-colors"
+                title="Restore recommended default categories"
               >
-                <Download size={12} /> Template
+                <RotateCcw size={12} /> Reset to defaults
               </button>
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
-                title="Upload CSV"
-              >
-                <Upload size={12} /> Upload CSV
-              </button>
-              <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={downloadTemplate}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
+                  title="Download CSV template"
+                >
+                  <Download size={12} /> Template
+                </button>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 transition-colors"
+                  title="Upload CSV"
+                >
+                  <Upload size={12} /> Upload CSV
+                </button>
+                <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleUpload} />
+              </div>
             </div>
 
             {/* Datalists for autocomplete */}
@@ -525,12 +581,12 @@ export default function StepOverallConfig({ config, updateConfig, onNext, onBack
               </div>
 
               {/* Data rows */}
-              {sortedCategories.length === 0 && (
+              {displayRows.length === 0 && (
                 <div className="px-4 py-8 text-center text-sm text-slate-400">
                   No categories yet — add one below or upload a CSV.
                 </div>
               )}
-              {sortedCategories.map((cat) => (
+              {displayRows.map((cat) => (
                 <div key={cat.id} className={`grid ${gridClass} gap-0 border-b border-slate-100 last:border-b-0 hover:bg-slate-50/60 transition-colors`}>
                   {colKeys.map((key, ci) => (
                     <span key={ci} className="px-4 py-2.5 text-sm text-slate-700 truncate border-r border-slate-100 last:border-r-0">
@@ -602,8 +658,8 @@ export default function StepOverallConfig({ config, updateConfig, onNext, onBack
               {duplicateError
                 ? <p className="text-xs text-red-600 font-medium">This combination already exists — try a different value.</p>
                 : <span />}
-              {oc.categories.length > 0 && (
-                <p className="text-xs text-slate-400">{oc.categories.length} categor{oc.categories.length === 1 ? "y" : "ies"} added</p>
+              {displayRows.length > 0 && (
+                <p className="text-xs text-slate-400">{displayRows.length} categor{displayRows.length === 1 ? "y" : "ies"} shown{displayRows.length < oc.categories.length ? ` (${oc.categories.length} total entries)` : ""}</p>
               )}
             </div>
           </div>
@@ -791,6 +847,7 @@ export default function StepOverallConfig({ config, updateConfig, onNext, onBack
       onNext={onNext}
       onBack={onBack}
       onSaveDraft={onSaveDraft}
+      canProceed={isLast}
     >
       <div className="space-y-6">
 

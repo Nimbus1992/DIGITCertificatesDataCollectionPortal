@@ -17,11 +17,15 @@ interface Props {
   summaryItems?: SummaryItem[];
   /** Label for the "Configure [next]" button in the summary (e.g. "Configure Branding"). Required when summaryItems is provided. */
   nextSectionLabel?: string;
+  /** Called synchronously before the summary is shown — use to flush un-committed draft state into config. */
+  onBeforeSummary?: () => void;
+  /** When false, the "Save & Continue" button is disabled. Use for steps with internal sub-steps that must all be visited first. */
+  canProceed?: boolean;
 }
 
 export function StepWrapper({
   step, title, subtitle, children, onNext, onBack, onSaveDraft, nextLabel, isLastStep,
-  summaryItems, nextSectionLabel,
+  summaryItems, nextSectionLabel, onBeforeSummary, canProceed = true,
 }: Props) {
   const [draftState, setDraftState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [draftError, setDraftError] = useState("");
@@ -57,6 +61,7 @@ export function StepWrapper({
   // "Save & Continue" either shows summary or navigates directly
   const handleNextClick = () => {
     if (hasSummary) {
+      onBeforeSummary?.();  // flush any un-committed draft state before reading summaryItems
       setShowSummary(true);
     } else {
       onNext();
@@ -145,7 +150,13 @@ export function StepWrapper({
               {/* Save & Continue */}
               <button
                 onClick={handleNextClick}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm"
+                disabled={!canProceed}
+                title={!canProceed ? "Complete all steps in this section before continuing" : undefined}
+                className={`flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-semibold transition-colors shadow-sm ${
+                  !canProceed
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    : "bg-blue-600 hover:bg-blue-700 text-white"
+                }`}
               >
                 {nextLabel ?? (isLastStep ? "Finish" : "Save & Continue")}
                 <ArrowRight size={15} />

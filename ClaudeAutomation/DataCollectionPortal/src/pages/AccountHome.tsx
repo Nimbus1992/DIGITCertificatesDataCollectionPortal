@@ -1,6 +1,5 @@
 import { CheckCircle2, Circle, ChevronRight, ArrowRight, LogOut } from "lucide-react";
 import type { ImplementationConfig } from "../types";
-import { isStepComplete } from "../lib/stepValidation";
 
 interface StepMeta { id: number; label: string }
 
@@ -39,18 +38,26 @@ const TOTAL = 13;
 interface Props {
   orgName: string;
   config: ImplementationConfig;
+  completedSteps: Set<number>;
   onEnter: (step: number) => void;
   onLogout: () => void;
 }
 
-export default function AccountHome({ orgName, config, onEnter, onLogout }: Props) {
+export default function AccountHome({ orgName, config, completedSteps, onEnter, onLogout }: Props) {
+  // A step is "done" when the user explicitly saved it (completedSteps tracks this).
+  // Review & Export is the exception — it's only done when the config is submitted.
+  function isDone(id: number): boolean {
+    if (id === 13) return config.metadata.status === "submitted";
+    return completedSteps.has(id);
+  }
+
   const completedCount = Array.from({ length: TOTAL }, (_, i) => i + 1)
-    .filter((id) => isStepComplete(id, config)).length;
+    .filter((id) => isDone(id)).length;
   const progressPct = Math.round((completedCount / TOTAL) * 100);
 
-  // Find the first incomplete step to resume from
+  // Find the first step not yet done
   const firstIncomplete = Array.from({ length: TOTAL }, (_, i) => i + 1)
-    .find((id) => !isStepComplete(id, config)) ?? TOTAL;
+    .find((id) => !isDone(id)) ?? TOTAL;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -119,7 +126,7 @@ export default function AccountHome({ orgName, config, onEnter, onLogout }: Prop
         {/* Section breakdown */}
         <div className="space-y-4">
           {GROUPS.map((group) => {
-            const groupComplete = group.steps.filter((s) => isStepComplete(s.id, config)).length;
+            const groupComplete = group.steps.filter((s) => isDone(s.id)).length;
             return (
               <div key={group.label} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-100">
@@ -130,7 +137,7 @@ export default function AccountHome({ orgName, config, onEnter, onLogout }: Prop
                 </div>
                 <div className="divide-y divide-slate-100">
                   {group.steps.map((step) => {
-                    const complete = isStepComplete(step.id, config);
+                    const complete = isDone(step.id);
                     return (
                       <button
                         key={step.id}
@@ -166,7 +173,7 @@ export default function AccountHome({ orgName, config, onEnter, onLogout }: Prop
               className="w-full flex items-center justify-between px-5 py-4 hover:bg-slate-50 transition-colors text-left group"
             >
               <div className="flex items-center gap-3">
-                {isStepComplete(13, config)
+                {isDone(13)
                   ? <CheckCircle2 size={16} className="text-green-500 shrink-0" />
                   : <Circle size={16} className="text-slate-300 shrink-0" />}
                 <div>

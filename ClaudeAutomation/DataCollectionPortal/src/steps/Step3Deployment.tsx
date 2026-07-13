@@ -44,7 +44,8 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
   const [parseError, setParseError] = useState("");
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isProcessed, setIsProcessed] = useState(false);
+  // Derived from config so it survives navigation and login/logout cycles
+  const isProcessed = d.boundaryProcessed ?? false;
   // Local boundary name state (mirrors config.deployment.hierarchyName for the top-level input)
   const [localHierarchyName, setLocalHierarchyName] = useState(d.hierarchyName ?? "");
   const shapefileInputRef = useRef<HTMLInputElement>(null);
@@ -88,7 +89,11 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
     }
     const stem = fileStem(file.name);
     const autoLevels = mockLevels(stem);
-    setIsProcessed(false);
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      set({ shapefileDataUrl: ev.target?.result as string });
+    };
+    reader.readAsDataURL(file);
     set({
       shapefileName: file.name,
       hierarchyName: localHierarchyName || stem,
@@ -96,6 +101,7 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
       boundaryRows: [],
       uploadMethod: "shapefile",
       operatingLevel: autoLevels.length - 1,
+      boundaryProcessed: false,
     });
   };
 
@@ -181,11 +187,11 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
 
         if (errors.length > 0) { setValidationErrors(errors); return; }
 
-        setIsProcessed(false);
         set({
           boundaryRows: parsed,
           uploadMethod: "excel",
           operatingLevel: Math.max(0, levels.length - 1),
+          boundaryProcessed: false,
         });
       } catch {
         setParseError("Could not read the file. Make sure it is a valid .xlsx or .xls file.");
@@ -247,17 +253,21 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
 
   const handleProcess = () => {
     setIsProcessing(true);
-    setIsProcessed(false);
     setTimeout(() => {
       setIsProcessing(false);
-      setIsProcessed(true);
+      if (uploadMethod === "shapefile") {
+        // Persist mock preview rows into config so the review page has data to display
+        set({ boundaryProcessed: true, boundaryRows: mockShapefileRows });
+      } else {
+        set({ boundaryProcessed: true });
+      }
     }, 1500);
   };
 
   // Build summary items from current deployment config
   const boundarySummaryItems = [
     { label: "Boundary Name", value: d.hierarchyName || "—" },
-    { label: "Upload Method", value: d.uploadMethod === "shapefile" ? "Shapefile" : d.uploadMethod === "excel" ? "Excel" : "—" },
+    { label: "Upload Method", value: d.uploadMethod === "shapefile" ? "Shapefile (.shp / .zip)" : d.uploadMethod === "excel" ? "Excel (.xlsx)" : "—" },
     {
       label: "Hierarchy Levels",
       value: levels.length > 0 ? levels.map((l) => l.name).filter(Boolean) : [] as string[],
@@ -269,12 +279,16 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
         : "—",
     },
     {
-      label: "Data Rows",
+      label: "Data",
       value: d.uploadMethod === "excel" && rows.length > 0
-        ? `${rows.length} rows uploaded`
+        ? `${rows.length} boundary rows`
         : d.uploadMethod === "shapefile" && d.shapefileName
-        ? `Shapefile: ${d.shapefileName}`
+        ? d.shapefileName
         : "—",
+    },
+    {
+      label: "Status",
+      value: isProcessed ? "Processed & ready" : "Not yet processed",
     },
   ];
 
@@ -287,7 +301,7 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
       onBack={onBack}
       onSaveDraft={onSaveDraft}
       summaryItems={boundarySummaryItems}
-      nextSectionLabel="Configure Branding"
+      nextSectionLabel="Integration Setup"
     >
       <div className="space-y-5">
 
@@ -313,9 +327,7 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
               value={localHierarchyName}
               onChange={(e) => {
                 setLocalHierarchyName(e.target.value);
-                set({ hierarchyName: e.target.value });
-                // Reset processed state if name changes
-                if (isProcessed) { setIsProcessed(false); }
+                set({ hierarchyName: e.target.value, ...(isProcessed ? { boundaryProcessed: false } : {}) });
               }}
             />
             {!localHierarchyName.trim() && (
@@ -342,8 +354,7 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
                   setValidationErrors([]);
                   // Only reset if switching away from current method
                   if (uploadMethod !== "shapefile") {
-                    setIsProcessed(false);
-                    set({ uploadMethod: "shapefile", shapefileName: "", hierarchyLevels: [], hierarchyName: localHierarchyName, boundaryRows: [], operatingLevel: 0 });
+                    set({ uploadMethod: "shapefile", shapefileName: "", hierarchyLevels: [], hierarchyName: localHierarchyName, boundaryRows: [], operatingLevel: 0, boundaryProcessed: false });
                   }
                 }}
                 className={`rounded-xl border-2 p-4 text-left transition-all relative ${uploadMethod === "shapefile" ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:border-slate-300 bg-white"}`}
@@ -370,8 +381,7 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
                   setParseError("");
                   setValidationErrors([]);
                   if (uploadMethod !== "excel") {
-                    setIsProcessed(false);
-                    set({ uploadMethod: "excel", shapefileName: "", hierarchyLevels: [], hierarchyName: localHierarchyName, boundaryRows: [], operatingLevel: 0 });
+                    set({ uploadMethod: "excel", shapefileName: "", hierarchyLevels: [], hierarchyName: localHierarchyName, boundaryRows: [], operatingLevel: 0, boundaryProcessed: false });
                     setExcelLevelDraft(Array(excelLevelCount).fill(""));
                   }
                 }}
@@ -426,7 +436,7 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        set({ shapefileName: "", hierarchyLevels: [], hierarchyName: "", operatingLevel: 0 });
+                        set({ shapefileName: "", hierarchyLevels: [], hierarchyName: "", operatingLevel: 0, boundaryRows: [], boundaryProcessed: false });
                         setShapefileError("");
                       }}
                       className="text-slate-400 hover:text-red-500 text-xs transition-colors"
@@ -720,9 +730,8 @@ export default function Step3Deployment({ config, updateConfig, onNext, onBack, 
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            set({ boundaryRows: [] });
+                            set({ boundaryRows: [], boundaryProcessed: false });
                             setValidationErrors([]);
-                            setIsProcessed(false);
                           }}
                           className="text-slate-400 hover:text-red-500 text-xs ml-1 transition-colors"
                         >

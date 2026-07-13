@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import type {
   ImplementationConfig,
   WorkflowConfig,
   WorkflowStage,
   WorkflowAction,
   WorkflowNotification,
-  WorkflowChecklistItem,
+  WorkflowChecklist,
+  WorkflowChecklistQuestion,
 } from "../types";
 import { StepWrapper } from "./StepWrapper";
 import {
@@ -140,14 +141,47 @@ type PanelTarget = { rowId: string; kind: "notifications" | "checklist" } | null
 
 interface WorkflowTableProps {
   rows: WorkflowStage[];
-  checklistItems: WorkflowChecklistItem[];
+  checklists: WorkflowChecklist[];
   roleNames: string[];
+  config: ImplementationConfig;
   onSetRows: (s: WorkflowStage[]) => void;
-  onSetChecklistItems: (c: WorkflowChecklistItem[]) => void;
+  onSetChecklists: (c: WorkflowChecklist[]) => void;
 }
 
-function WorkflowTable({ rows, checklistItems, roleNames, onSetRows, onSetChecklistItems }: WorkflowTableProps) {
+// Variable tag groups for notification form
+const NOTIF_VAR_GROUPS = [
+  {
+    label: "SYSTEM",
+    vars: ["Application ID", "Submitted Date", "Last Updated Date", "Status", "Portal URL", "Organisation Name"],
+  },
+  {
+    label: "APPLICANT",
+    vars: ["Full Name", "Mobile Number", "Email Address", "ID Type", "ID Number"],
+  },
+  {
+    label: "BUSINESS",
+    vars: [
+      "Business / Trade Name", "Trade Category", "Sub-category", "Business Registration No.",
+      "Tax Identification No.", "Year of Establishment", "Business Area", "No. of Employees",
+    ],
+  },
+];
+
+function WorkflowTable({ rows, checklists, roleNames, config, onSetRows, onSetChecklists }: WorkflowTableProps) {
   const [openPanel, setOpenPanel] = useState<PanelTarget>(null);
+
+  // ── Notification "Add" form state ────────────────────────────────────────────
+  const [showAddNotif, setShowAddNotif] = useState(false);
+  const [notifForm, setNotifForm] = useState<{
+    event: string; channel: "email" | "sms" | "push"; recipient: "applicant" | "staff" | "both"; subject: string;
+  }>({ event: "", channel: "email", recipient: "applicant", subject: "" });
+  const subjectRef = useRef<HTMLInputElement>(null);
+
+  // ── Checklist "Add" form state ───────────────────────────────────────────────
+  const [showAddChecklist, setShowAddChecklist] = useState(false);
+  const [newChecklistName, setNewChecklistName] = useState("");
+  const [newChecklistQuestions, setNewChecklistQuestions] = useState<WorkflowChecklistQuestion[]>([]);
+  const [expandedChecklistId, setExpandedChecklistId] = useState<string | null>(null);
 
   const inputCls = "px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white";
   const selectCls = inputCls;
@@ -185,18 +219,26 @@ function WorkflowTable({ rows, checklistItems, roleNames, onSetRows, onSetCheckl
 
   // ── Notification helpers ─────────────────────────────────────────────────────
 
-  function addNotification(rowId: string) {
-    const row = rows.find(r => r.id === rowId);
-    if (!row) return;
-    const newNotif: WorkflowNotification = { channel: "email", recipient: "applicant", subject: "" };
-    updateRow(rowId, { notifications: [...row.notifications, newNotif] });
+  function openNotifPanel(rowId: string) {
+    const panelRow = rows.find(r => r.id === rowId);
+    const defaultEvent = panelRow?.actions[0]?.label || "";
+    setNotifForm({ event: defaultEvent, channel: "email", recipient: "applicant", subject: "" });
+    setShowAddNotif(false);
+    setOpenPanel({ rowId, kind: "notifications" });
   }
 
-  function updateNotification(rowId: string, idx: number, patch: Partial<WorkflowNotification>) {
+  function commitAddNotification(rowId: string) {
     const row = rows.find(r => r.id === rowId);
     if (!row) return;
-    const updated = row.notifications.map((n, i) => i === idx ? { ...n, ...patch } : n);
-    updateRow(rowId, { notifications: updated });
+    const newNotif: WorkflowNotification = {
+      event: notifForm.event,
+      channel: notifForm.channel,
+      recipient: notifForm.recipient,
+      subject: notifForm.subject,
+    };
+    updateRow(rowId, { notifications: [...row.notifications, newNotif] });
+    setShowAddNotif(false);
+    setNotifForm({ event: "", channel: "email", recipient: "applicant", subject: "" });
   }
 
   function removeNotification(rowId: string, idx: number) {
@@ -205,36 +247,94 @@ function WorkflowTable({ rows, checklistItems, roleNames, onSetRows, onSetCheckl
     updateRow(rowId, { notifications: row.notifications.filter((_, i) => i !== idx) });
   }
 
+  function insertVarTag(varName: string) {
+    const el = subjectRef.current;
+    if (!el) {
+      setNotifForm(f => ({ ...f, subject: f.subject + `{${varName}}` }));
+      return;
+    }
+    const start = el.selectionStart ?? el.value.length;
+    const end = el.selectionEnd ?? el.value.length;
+    const tag = `{${varName}}`;
+    const newVal = el.value.slice(0, start) + tag + el.value.slice(end);
+    setNotifForm(f => ({ ...f, subject: newVal }));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + tag.length, start + tag.length);
+    });
+  }
+
   // ── Checklist helpers ────────────────────────────────────────────────────────
 
-  function addChecklistItem(rowId: string) {
-    const newItem: WorkflowChecklistItem = {
+  function checklistsForRow(rowId: string) {
+    return checklists.filter(cl => cl.stageId === rowId);
+  }
+
+  function openChecklistPanel(rowId: string) {
+    setShowAddChecklist(false);
+    setNewChecklistName("");
+    setNewChecklistQuestions([]);
+    setExpandedChecklistId(null);
+    setOpenPanel({ rowId, kind: "checklist" });
+  }
+
+  function commitAddChecklist(rowId: string) {
+    if (!newChecklistName.trim()) return;
+    const newCl: WorkflowChecklist = {
       id: uid(),
       stageId: rowId,
-      label: "",
-      fieldType: "checkbox",
-      required: true,
+      name: newChecklistName.trim(),
+      questions: newChecklistQuestions,
     };
-    onSetChecklistItems([...checklistItems, newItem]);
+    onSetChecklists([...checklists, newCl]);
+    setShowAddChecklist(false);
+    setNewChecklistName("");
+    setNewChecklistQuestions([]);
   }
 
-  function updateChecklistItem(itemId: string, patch: Partial<WorkflowChecklistItem>) {
-    onSetChecklistItems(checklistItems.map(c => c.id === itemId ? { ...c, ...patch } : c));
+  function deleteChecklist(clId: string) {
+    onSetChecklists(checklists.filter(cl => cl.id !== clId));
   }
 
-  function removeChecklistItem(itemId: string) {
-    onSetChecklistItems(checklistItems.filter(c => c.id !== itemId));
+  function addQuestionToNewChecklist() {
+    const q: WorkflowChecklistQuestion = { id: uid(), label: "", fieldType: "checkbox", required: true };
+    setNewChecklistQuestions(qs => [...qs, q]);
   }
 
-  function checklistItemsForRow(rowId: string) {
-    return checklistItems.filter(c => c.stageId === rowId);
+  function updateNewQuestion(qId: string, patch: Partial<WorkflowChecklistQuestion>) {
+    setNewChecklistQuestions(qs => qs.map(q => q.id === qId ? { ...q, ...patch } : q));
   }
+
+  function removeNewQuestion(qId: string) {
+    setNewChecklistQuestions(qs => qs.filter(q => q.id !== qId));
+  }
+
+  function addQuestionToExistingChecklist(clId: string) {
+    const q: WorkflowChecklistQuestion = { id: uid(), label: "", fieldType: "checkbox", required: true };
+    onSetChecklists(checklists.map(cl => cl.id === clId ? { ...cl, questions: [...cl.questions, q] } : cl));
+  }
+
+  function updateExistingQuestion(clId: string, qId: string, patch: Partial<WorkflowChecklistQuestion>) {
+    onSetChecklists(checklists.map(cl =>
+      cl.id === clId
+        ? { ...cl, questions: cl.questions.map(q => q.id === qId ? { ...q, ...patch } : q) }
+        : cl
+    ));
+  }
+
+  function removeExistingQuestion(clId: string, qId: string) {
+    onSetChecklists(checklists.map(cl =>
+      cl.id === clId ? { ...cl, questions: cl.questions.filter(q => q.id !== qId) } : cl
+    ));
+  }
+
+  // ── Custom field variable tags ───────────────────────────────────────────────
+  const customFieldVars = (config.formConfig.customFields ?? []).map((cf: { label?: string; name?: string }) => cf.label || cf.name || "").filter(Boolean);
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div className="rounded-xl border border-slate-200 overflow-hidden">
-      {/* Fix #1: table-fixed + w-full prevents horizontal overflow */}
       <div className="overflow-x-hidden">
         <table className="w-full table-fixed text-sm">
           <colgroup>
@@ -261,7 +361,7 @@ function WorkflowTable({ rows, checklistItems, roleNames, onSetRows, onSetCheckl
             {rows.map((row) => {
               const action = row.actions[0];
               const notifCount = row.notifications.length;
-              const checkCount = checklistItemsForRow(row.id).length;
+              const checkCount = checklistsForRow(row.id).length;
               const isNotifOpen = openPanel?.rowId === row.id && openPanel.kind === "notifications";
               const isCheckOpen = openPanel?.rowId === row.id && openPanel.kind === "checklist";
               const isEndRow = !!row.isEnd;
@@ -352,7 +452,7 @@ function WorkflowTable({ rows, checklistItems, roleNames, onSetRows, onSetCheckl
                     {/* Notifications badge + button */}
                     <td className="px-2 py-2.5 text-center">
                       <button
-                        onClick={() => setOpenPanel(isNotifOpen ? null : { rowId: row.id, kind: "notifications" })}
+                        onClick={() => isNotifOpen ? setOpenPanel(null) : openNotifPanel(row.id)}
                         className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium transition-colors ${
                           isNotifOpen
                             ? "bg-blue-600 text-white border-blue-600"
@@ -374,7 +474,7 @@ function WorkflowTable({ rows, checklistItems, roleNames, onSetRows, onSetCheckl
                     {/* Checklist badge + button */}
                     <td className="px-2 py-2.5 text-center">
                       <button
-                        onClick={() => setOpenPanel(isCheckOpen ? null : { rowId: row.id, kind: "checklist" })}
+                        onClick={() => isCheckOpen ? setOpenPanel(null) : openChecklistPanel(row.id)}
                         className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-xs font-medium transition-colors ${
                           isCheckOpen
                             ? "bg-orange-600 text-white border-orange-600"
@@ -413,103 +513,174 @@ function WorkflowTable({ rows, checklistItems, roleNames, onSetRows, onSetCheckl
                           <div className="flex items-center justify-between">
                             <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
                               <Bell size={14} className="text-blue-500" />
-                              Notifications — {row.name || "this state"} / {action?.label || "this action"}
+                              Notifications — {row.name || "this state"}
                             </h4>
-                            <button
-                              onClick={() => addNotification(row.id)}
-                              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
-                            >
-                              <Plus size={12} /> Add notification
-                            </button>
+                            {!showAddNotif && (
+                              <button
+                                onClick={() => {
+                                  setNotifForm({ event: action?.label || "", channel: "email", recipient: "applicant", subject: "" });
+                                  setShowAddNotif(true);
+                                }}
+                                className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+                              >
+                                <Plus size={12} /> Add Notification
+                              </button>
+                            )}
                           </div>
 
-                          {row.notifications.length === 0 ? (
-                            <p className="text-xs text-slate-400 italic">No notifications yet. Click "Add notification" to create one.</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {row.notifications.map((notif, nIdx) => (
-                                <div key={nIdx} className="flex items-center gap-2 flex-wrap bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                                  {/* Channel multi-checkboxes */}
-                                  <div className="flex items-center gap-3 shrink-0">
-                                    {(["email", "sms", "push"] as const).map(ch => (
-                                      <label key={ch} className="flex items-center gap-1 cursor-pointer text-xs text-slate-600">
-                                        <input
-                                          type="checkbox"
-                                          checked={notif.channel === ch}
-                                          onChange={() => updateNotification(row.id, nIdx, { channel: ch })}
-                                          className="rounded"
-                                        />
-                                        {ch === "email" && <Mail size={11} className="text-blue-500" />}
-                                        {ch === "sms" && <MessageSquare size={11} className="text-purple-500" />}
-                                        {ch === "push" && <Bell size={11} className="text-orange-500" />}
-                                        <span className="capitalize">{ch}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-
-                                  {/* Recipient radio */}
-                                  <div className="flex items-center gap-3 shrink-0">
-                                    {(["applicant", "staff", "both"] as const).map(rec => (
-                                      <label key={rec} className="flex items-center gap-1 cursor-pointer text-xs text-slate-600">
-                                        <input
-                                          type="radio"
-                                          name={`recipient-${row.id}-${nIdx}`}
-                                          checked={notif.recipient === rec}
-                                          onChange={() => updateNotification(row.id, nIdx, { recipient: rec })}
-                                        />
-                                        <span className="capitalize">{rec}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-
-                                  {/* Subject */}
-                                  <input
-                                    type="text"
-                                    value={notif.subject}
-                                    onChange={e => updateNotification(row.id, nIdx, { subject: e.target.value })}
-                                    placeholder="Subject / message template"
-                                    className={`flex-1 min-w-0 ${inputCls}`}
-                                  />
-
-                                  {/* Remove */}
+                          {/* ── Existing notifications list ── */}
+                          {row.notifications.length === 0 && !showAddNotif && (
+                            <p className="text-xs text-slate-400 italic">No notifications yet. Click "Add Notification" to create one.</p>
+                          )}
+                          {row.notifications.length > 0 && (
+                            <div className="space-y-1.5">
+                              {row.notifications.map((n, nIdx) => (
+                                <div key={nIdx} className="flex items-center gap-2 bg-slate-50 rounded-lg px-3 py-2 border border-slate-100 text-xs">
+                                  {n.event && <span className="text-slate-600 font-medium shrink-0">{n.event}</span>}
+                                  {n.event && <span className="text-slate-300">·</span>}
+                                  <span className={`shrink-0 px-1.5 py-0.5 rounded font-medium capitalize ${
+                                    n.channel === "email" ? "bg-blue-100 text-blue-700" :
+                                    n.channel === "sms" ? "bg-purple-100 text-purple-700" :
+                                    "bg-orange-100 text-orange-700"
+                                  }`}>
+                                    {n.channel === "email" && <Mail size={9} className="inline mr-0.5" />}
+                                    {n.channel === "sms" && <MessageSquare size={9} className="inline mr-0.5" />}
+                                    {n.channel === "push" && <Bell size={9} className="inline mr-0.5" />}
+                                    {n.channel}
+                                  </span>
+                                  <span className="text-slate-300">·</span>
+                                  <span className="text-slate-600 capitalize shrink-0">{n.recipient}</span>
+                                  <span className="text-slate-400 truncate flex-1">{n.subject ? `— ${n.subject}` : ""}</span>
                                   <button
                                     onClick={() => removeNotification(row.id, nIdx)}
-                                    className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                                    className="p-1 text-slate-300 hover:text-red-500 rounded hover:bg-red-50 transition-colors shrink-0"
                                   >
-                                    <Trash2 size={13} />
+                                    <Trash2 size={12} />
                                   </button>
                                 </div>
                               ))}
                             </div>
                           )}
 
-                          {/* Existing notification chips */}
-                          {row.notifications.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {row.notifications.map((n, i) => (
-                                <span
-                                  key={i}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium border border-blue-200"
-                                >
-                                  {n.channel === "email" && <Mail size={10} />}
-                                  {n.channel === "sms" && <MessageSquare size={10} />}
-                                  {n.channel === "push" && <Bell size={10} />}
-                                  {n.channel} → {n.recipient}
-                                  {n.subject ? `: ${n.subject.slice(0, 20)}${n.subject.length > 20 ? "…" : ""}` : ""}
-                                  <button
-                                    onClick={() => removeNotification(row.id, i)}
-                                    className="ml-0.5 hover:text-red-600"
+                          {/* ── Add Notification inline form ── */}
+                          {showAddNotif && (
+                            <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-3">
+                              <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">Add Notification</p>
+                              <div className="w-full h-px bg-blue-200" />
+
+                              {/* Row 1: Event + Channel */}
+                              <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                  <label className="text-xs text-slate-500 font-medium">Event</label>
+                                  <input
+                                    type="text"
+                                    value={notifForm.event}
+                                    onChange={e => setNotifForm(f => ({ ...f, event: e.target.value }))}
+                                    placeholder={action?.label || "e.g. Submit Application"}
+                                    className={inputCls + " w-full"}
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-xs text-slate-500 font-medium">Channel</label>
+                                  <select
+                                    value={notifForm.channel}
+                                    onChange={e => setNotifForm(f => ({ ...f, channel: e.target.value as "email" | "sms" | "push" }))}
+                                    className={selectCls + " w-full"}
                                   >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
+                                    <option value="email">Email</option>
+                                    <option value="sms">SMS</option>
+                                    <option value="push">Push</option>
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* Row 2: Recipient */}
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500 font-medium">Recipient</label>
+                                <select
+                                  value={notifForm.recipient}
+                                  onChange={e => setNotifForm(f => ({ ...f, recipient: e.target.value as "applicant" | "staff" | "both" }))}
+                                  className={selectCls + " w-full"}
+                                >
+                                  <option value="applicant">Applicant</option>
+                                  <option value="staff">Staff</option>
+                                  <option value="both">Both</option>
+                                </select>
+                              </div>
+
+                              {/* Row 3: Subject */}
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500 font-medium">Message / Subject</label>
+                                <input
+                                  ref={subjectRef}
+                                  type="text"
+                                  value={notifForm.subject}
+                                  onChange={e => setNotifForm(f => ({ ...f, subject: e.target.value }))}
+                                  placeholder="e.g. Your application has been submitted. Ref: {APP_ID}"
+                                  className={inputCls + " w-full"}
+                                />
+                              </div>
+
+                              {/* Variable tags */}
+                              <div className="space-y-2">
+                                {NOTIF_VAR_GROUPS.map(group => (
+                                  <div key={group.label}>
+                                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">{group.label}</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {group.vars.map(v => (
+                                        <button
+                                          key={v}
+                                          type="button"
+                                          onClick={() => insertVarTag(v)}
+                                          className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-xs text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                        >
+                                          {v}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                                {customFieldVars.length > 0 && (
+                                  <div>
+                                    <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">CUSTOM FIELDS</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {customFieldVars.map((v: string) => (
+                                        <button
+                                          key={v}
+                                          type="button"
+                                          onClick={() => insertVarTag(v)}
+                                          className="px-2 py-0.5 rounded-full bg-white border border-slate-200 text-xs text-slate-600 hover:border-blue-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                                        >
+                                          {v}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Add / Cancel */}
+                              <div className="flex justify-end gap-2 pt-1">
+                                <button
+                                  onClick={() => setShowAddNotif(false)}
+                                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs hover:bg-slate-50 transition-colors"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => commitAddNotification(row.id)}
+                                  disabled={!notifForm.channel || !notifForm.recipient || !notifForm.subject.trim()}
+                                  className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  Add
+                                </button>
+                              </div>
                             </div>
                           )}
 
                           <div className="flex justify-end pt-1">
                             <button
-                              onClick={() => setOpenPanel(null)}
+                              onClick={() => { setShowAddNotif(false); setOpenPanel(null); }}
                               className="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors"
                             >
                               Done
@@ -528,87 +699,170 @@ function WorkflowTable({ rows, checklistItems, roleNames, onSetRows, onSetCheckl
                           <div className="flex items-center justify-between">
                             <h4 className="text-sm font-semibold text-slate-800 flex items-center gap-2">
                               <CheckSquare size={14} className="text-orange-500" />
-                              Checklist — {row.name || "this state"} / {action?.label || "this action"}
+                              Checklists — {row.name || "this state"}
                             </h4>
-                            <button
-                              onClick={() => addChecklistItem(row.id)}
-                              className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium"
-                            >
-                              <Plus size={12} /> Add item
-                            </button>
+                            {!showAddChecklist && (
+                              <button
+                                onClick={() => { setShowAddChecklist(true); setNewChecklistName(""); setNewChecklistQuestions([]); }}
+                                className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium"
+                              >
+                                <Plus size={12} /> Add Checklist
+                              </button>
+                            )}
                           </div>
 
-                          {checklistItemsForRow(row.id).length === 0 ? (
-                            <p className="text-xs text-slate-400 italic">No checklist items yet. Click "Add item" to create one.</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {checklistItemsForRow(row.id).map(item => (
-                                <div key={item.id} className="flex items-center gap-2 flex-wrap bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
-                                  {/* Label */}
-                                  <input
-                                    type="text"
-                                    value={item.label}
-                                    onChange={e => updateChecklistItem(item.id, { label: e.target.value })}
-                                    placeholder="e.g. Verify fire exits"
-                                    className={`flex-1 min-w-0 ${inputCls}`}
-                                  />
-
-                                  {/* Field type */}
-                                  <select
-                                    value={item.fieldType}
-                                    onChange={e => updateChecklistItem(item.id, { fieldType: e.target.value as WorkflowChecklistItem["fieldType"] })}
-                                    className={`${selectCls} w-28 shrink-0`}
-                                  >
-                                    <option value="checkbox">Checkbox</option>
-                                    <option value="text">Text</option>
-                                    <option value="file">File</option>
-                                  </select>
-
-                                  {/* Required toggle */}
-                                  <Toggle
-                                    checked={item.required}
-                                    onChange={v => updateChecklistItem(item.id, { required: v })}
-                                    label="Required"
-                                  />
-
-                                  {/* Remove */}
+                          {/* ── Existing checklists ── */}
+                          {checklistsForRow(row.id).length === 0 && !showAddChecklist && (
+                            <p className="text-xs text-slate-400 italic">No checklists yet. Click "Add Checklist" to create one.</p>
+                          )}
+                          {checklistsForRow(row.id).map(cl => {
+                            const isExpanded = expandedChecklistId === cl.id;
+                            return (
+                              <div key={cl.id} className="rounded-lg border border-slate-200 bg-slate-50 overflow-hidden">
+                                <div className="flex items-center justify-between px-3 py-2">
                                   <button
-                                    onClick={() => removeChecklistItem(item.id)}
-                                    className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                                    onClick={() => setExpandedChecklistId(isExpanded ? null : cl.id)}
+                                    className="flex items-center gap-2 text-sm font-medium text-slate-700 hover:text-orange-700 flex-1 text-left"
+                                  >
+                                    {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                    {cl.name}
+                                    <span className="text-xs text-slate-400 font-normal">({cl.questions.length} question{cl.questions.length !== 1 ? "s" : ""})</span>
+                                  </button>
+                                  <button
+                                    onClick={() => deleteChecklist(cl.id)}
+                                    className="p-1 text-slate-300 hover:text-red-500 rounded hover:bg-red-50 transition-colors"
                                   >
                                     <Trash2 size={13} />
                                   </button>
                                 </div>
-                              ))}
-                            </div>
-                          )}
 
-                          {/* Existing items as chips */}
-                          {checklistItemsForRow(row.id).length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 pt-1">
-                              {checklistItemsForRow(row.id).map(item => (
-                                <span
-                                  key={item.id}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-xs font-medium border border-orange-200"
+                                {isExpanded && (
+                                  <div className="border-t border-slate-200 px-3 py-3 space-y-2 bg-white">
+                                    {cl.questions.length === 0 && (
+                                      <p className="text-xs text-slate-400 italic">No questions yet.</p>
+                                    )}
+                                    {cl.questions.map(q => (
+                                      <div key={q.id} className="flex items-center gap-2 flex-wrap bg-slate-50 rounded-lg px-3 py-2 border border-slate-100">
+                                        <input
+                                          type="text"
+                                          value={q.label}
+                                          onChange={e => updateExistingQuestion(cl.id, q.id, { label: e.target.value })}
+                                          placeholder="Question label"
+                                          className={inputCls + " flex-1 min-w-0"}
+                                        />
+                                        <select
+                                          value={q.fieldType}
+                                          onChange={e => updateExistingQuestion(cl.id, q.id, { fieldType: e.target.value as WorkflowChecklistQuestion["fieldType"] })}
+                                          className={selectCls + " w-28 shrink-0"}
+                                        >
+                                          <option value="checkbox">Checkbox</option>
+                                          <option value="text">Text</option>
+                                          <option value="file">File</option>
+                                        </select>
+                                        <Toggle
+                                          checked={q.required}
+                                          onChange={v => updateExistingQuestion(cl.id, q.id, { required: v })}
+                                          label="Required"
+                                        />
+                                        <button
+                                          onClick={() => removeExistingQuestion(cl.id, q.id)}
+                                          className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                                        >
+                                          <Trash2 size={12} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      onClick={() => addQuestionToExistingChecklist(cl.id)}
+                                      className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium mt-1"
+                                    >
+                                      <Plus size={11} /> Add Question
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+
+                          {/* ── Add Checklist inline form ── */}
+                          {showAddChecklist && (
+                            <div className="rounded-xl border border-orange-200 bg-orange-50 p-4 space-y-3">
+                              <p className="text-xs font-semibold text-slate-700 uppercase tracking-wide">New Checklist</p>
+                              <div className="space-y-1">
+                                <label className="text-xs text-slate-500 font-medium">Checklist Name</label>
+                                <input
+                                  type="text"
+                                  value={newChecklistName}
+                                  onChange={e => setNewChecklistName(e.target.value)}
+                                  placeholder="e.g. Field Inspection Checklist"
+                                  className={inputCls + " w-full"}
+                                />
+                              </div>
+
+                              {newChecklistQuestions.length > 0 && (
+                                <div className="space-y-2">
+                                  {newChecklistQuestions.map(q => (
+                                    <div key={q.id} className="flex items-center gap-2 flex-wrap bg-white rounded-lg px-3 py-2 border border-slate-100">
+                                      <input
+                                        type="text"
+                                        value={q.label}
+                                        onChange={e => updateNewQuestion(q.id, { label: e.target.value })}
+                                        placeholder="Question label"
+                                        className={inputCls + " flex-1 min-w-0"}
+                                      />
+                                      <select
+                                        value={q.fieldType}
+                                        onChange={e => updateNewQuestion(q.id, { fieldType: e.target.value as WorkflowChecklistQuestion["fieldType"] })}
+                                        className={selectCls + " w-28 shrink-0"}
+                                      >
+                                        <option value="checkbox">Checkbox</option>
+                                        <option value="text">Text</option>
+                                        <option value="file">File</option>
+                                      </select>
+                                      <Toggle
+                                        checked={q.required}
+                                        onChange={v => updateNewQuestion(q.id, { required: v })}
+                                        label="Required"
+                                      />
+                                      <button
+                                        onClick={() => removeNewQuestion(q.id)}
+                                        className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 transition-colors shrink-0"
+                                      >
+                                        <Trash2 size={12} />
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+
+                              <button
+                                onClick={addQuestionToNewChecklist}
+                                className="flex items-center gap-1 text-xs text-orange-600 hover:text-orange-700 font-medium"
+                              >
+                                <Plus size={11} /> Add Question
+                              </button>
+
+                              <div className="flex justify-end gap-2 pt-1">
+                                <button
+                                  onClick={() => setShowAddChecklist(false)}
+                                  className="px-3 py-1.5 rounded-lg border border-slate-300 text-slate-600 text-xs hover:bg-slate-50 transition-colors"
                                 >
-                                  <CheckSquare size={10} />
-                                  {item.label || "(empty)"}
-                                  <span className="opacity-60 capitalize">[{item.fieldType}]</span>
-                                  {item.required && <span className="text-red-500 font-bold">*</span>}
-                                  <button
-                                    onClick={() => removeChecklistItem(item.id)}
-                                    className="ml-0.5 hover:text-red-600"
-                                  >
-                                    ×
-                                  </button>
-                                </span>
-                              ))}
+                                  Cancel
+                                </button>
+                                <button
+                                  onClick={() => commitAddChecklist(row.id)}
+                                  disabled={!newChecklistName.trim()}
+                                  className="px-3 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-semibold hover:bg-orange-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                                >
+                                  Save Checklist
+                                </button>
+                              </div>
                             </div>
                           )}
 
                           <div className="flex justify-end pt-1">
                             <button
-                              onClick={() => setOpenPanel(null)}
+                              onClick={() => { setShowAddChecklist(false); setOpenPanel(null); }}
                               className="px-3 py-1.5 rounded-lg bg-orange-600 text-white text-xs font-semibold hover:bg-orange-700 transition-colors"
                             >
                               Done
@@ -663,14 +917,14 @@ export default function StepWorkflow({ config, updateConfig, onNext, onBack, onS
   // ── Start-state validation error ──────────────────────────────────────────
   const [startStateError, setStartStateError] = useState<string | null>(null);
 
-  // ── Determine active stages/checklistItems based on tab ───────────────────
+  // ── Determine active stages/checklists based on tab ──────────────────────
   const isRenewalTab = activeTab === "renewal";
   const activeRows: WorkflowStage[] = isRenewalTab
     ? (wf.renewalStages ?? [])
     : (wf.stages.length > 0 ? wf.stages : EXAMPLE_STAGES);
-  const activeChecklistItems: WorkflowChecklistItem[] = isRenewalTab
-    ? (wf.renewalChecklistItems ?? [])
-    : wf.checklistItems;
+  const activeChecklists = isRenewalTab
+    ? (wf.renewalChecklists ?? [])
+    : (wf.checklists ?? []);
 
   function setActiveRows(s: WorkflowStage[]) {
     if (isRenewalTab) {
@@ -680,15 +934,15 @@ export default function StepWorkflow({ config, updateConfig, onNext, onBack, onS
     }
   }
 
-  function setActiveChecklistItems(c: WorkflowChecklistItem[]) {
+  function setActiveChecklists(c: WorkflowChecklist[]) {
     if (isRenewalTab) {
-      updateWf("renewalChecklistItems", c);
+      updateWf("renewalChecklists", c);
     } else {
-      updateWf("checklistItems", c);
+      updateWf("checklists", c);
     }
   }
 
-  // ── Reset to example (Fix #2: fully replaces stages AND checklistItems) ───
+  // ── Reset to example ──────────────────────────────────────────────────────
   function handleReset() {
     // Build fresh example stages with new UIDs each time
     const freshStages: WorkflowStage[] = EXAMPLE_STAGES.map(s => ({
@@ -701,12 +955,14 @@ export default function StepWorkflow({ config, updateConfig, onNext, onBack, onS
         ...wf,
         renewalStages: freshStages,
         renewalChecklistItems: [],
+        renewalChecklists: [],
       });
     } else {
       updateConfig("workflow", {
         ...wf,
         stages: freshStages,
         checklistItems: [],
+        checklists: [],
       });
     }
     setClearConfirm(false);
@@ -841,10 +1097,11 @@ export default function StepWorkflow({ config, updateConfig, onNext, onBack, onS
             {/* ── Transition table ───────────────────────────────────────── */}
             <WorkflowTable
               rows={activeRows}
-              checklistItems={activeChecklistItems}
+              checklists={activeChecklists}
               roleNames={roleNames}
+              config={config}
               onSetRows={setActiveRows}
-              onSetChecklistItems={setActiveChecklistItems}
+              onSetChecklists={setActiveChecklists}
             />
           </>
         )}

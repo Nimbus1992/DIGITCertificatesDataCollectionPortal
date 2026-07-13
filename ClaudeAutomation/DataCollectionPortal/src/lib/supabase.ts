@@ -24,12 +24,13 @@ export interface AccountRecord {
   config_data: ImplementationConfig;
 }
 
-// ── Admin: fetch all accounts ────────────────────────────────────────────────
+// ── Admin: fetch all accounts (excludes soft-deleted) ───────────────────────
 export async function getAllAccounts(): Promise<{ data: AccountRecord[]; error: string | null }> {
   if (!supabase) return { data: [], error: null };
   const { data, error } = await supabase
     .from("implementation_configs")
     .select("id,org_name,department_name,country,super_user_email,super_user_emails,status,current_step,admin_verified,admin_notes,updated_at,created_at,config_data")
+    .neq("status", "deleted")
     .order("updated_at", { ascending: false });
   if (error) return { data: [], error: error.message };
   return { data: (data ?? []) as AccountRecord[], error: null };
@@ -104,6 +105,7 @@ export async function getAccountByEmail(
     .from("implementation_configs")
     .select("*")
     .contains("super_user_emails", [normalised])
+    .neq("status", "deleted")
     .limit(1)
     .single();
   if (error) {
@@ -114,11 +116,24 @@ export async function getAccountByEmail(
 }
 
 // ── Save / update config ─────────────────────────────────────────────────────
+// Pass accountId (the row UUID) whenever available so we UPDATE the exact row.
+// Falls back to upsert-by-org_name for anonymous / first-time saves.
 export async function saveConfig(
   config: ImplementationConfig,
   currentStep: number,
+  accountId?: string,
 ): Promise<{ error: string | null }> {
   if (!supabase) return { error: "Supabase not configured." };
+
+  const deduplicatedCategories = (() => {
+    const seen = new Set<string>();
+    return config.overall.categories.filter((c) => {
+      const key = [c.level1, c.level2, c.level3].map((v) => v.trim().toLowerCase()).join("\0");
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  })();
 
   const configToSave = {
     ...config,
@@ -127,27 +142,62 @@ export async function saveConfig(
       ...config.branding,
       logoUrl: config.branding.logoUrl?.startsWith("data:") ? "__has_logo__" : config.branding.logoUrl,
     },
+    overall: { ...config.overall, categories: deduplicatedCategories },
     metadata: { ...config.metadata, lastStep: currentStep },
   };
 
-  const { error } = await supabase.from("implementation_configs").upsert(
-    {
-      org_name: config.account.organizationName || "unnamed",
-      department_name: config.account.departmentName || null,
-      country: config.account.country || null,
-      config_data: configToSave,
-      status: config.metadata.status,
-      current_step: currentStep,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "org_name" },
-  );
+  const payload = {
+    org_name: config.account.organizationName || "unnamed",
+    department_name: config.account.departmentName || null,
+    country: config.account.country || null,
+    config_data: configToSave,
+    status: config.metadata.status,
+    current_step: currentStep,
+    updated_at: new Date().toISOString(),
+  };
+
+  let error;
+
+  if (accountId) {
+    // Targeted update — always hits the right row regardless of org_name changes
+    ({ error } = await supabase
+      .from("implementation_configs")
+      .update(payload)
+      .eq("id", accountId));
+  } else {
+    // Fallback for accounts without a known ID
+    ({ error } = await supabase
+      .from("implementation_configs")
+      .upsert(payload, { onConflict: "org_name" }));
+  }
 
   if (error) {
     if (error.message.includes("schema cache") || error.code === "PGRST205")
       return { error: "Table not found — run setup SQL in Supabase." };
     return { error: error.message };
   }
+  return { error: null };
+}
+
+// ── Admin: delete an account ──────────────────────────────────────────────────
+// Tries hard DELETE first; falls back to soft-delete (status → "deleted") if
+// Supabase RLS blocks DELETE for the anon key.
+export async function deleteAccount(id: string): Promise<{ error: string | null }> {
+  if (!supabase) return { error: "Supabase not configured." };
+
+  const { error: delErr, count } = await supabase
+    .from("implementation_configs")
+    .delete({ count: "exact" })
+    .eq("id", id);
+
+  if (!delErr && (count ?? 0) > 0) return { error: null };
+
+  // Fall back to soft delete when hard DELETE is blocked by RLS
+  const { error } = await supabase
+    .from("implementation_configs")
+    .update({ status: "deleted", updated_at: new Date().toISOString() })
+    .eq("id", id);
+  if (error) return { error: error.message };
   return { error: null };
 }
 

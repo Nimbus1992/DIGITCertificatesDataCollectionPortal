@@ -3,6 +3,7 @@ import {
   getAllAccounts,
   verifyAccount,
   updateSuperUsers,
+  deleteAccount,
   type AccountRecord,
 } from "../lib/supabase";
 import { exportAccountToExcel } from "../lib/exportExcel";
@@ -62,6 +63,11 @@ export default function AdminDashboard({ onLogout, onOpenAccount }: Props) {
   const [newEmailMap, setNewEmailMap] = useState<Record<string, string>>({});
   const [usersLoadingId, setUsersLoadingId] = useState<string | null>(null);
   const [usersError, setUsersError] = useState<Record<string, string>>({});
+
+  // Delete state
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<Record<string, string>>({});
 
   const fetchAccounts = useCallback(async () => {
     setLoading(true);
@@ -131,6 +137,18 @@ export default function AdminDashboard({ onLogout, onOpenAccount }: Props) {
       ...prev,
       [accountId]: (prev[accountId] ?? []).filter((e) => e !== email),
     }));
+  }
+
+  // ── Delete ──────────────────────────────────────────────────────────────────
+  async function handleDeleteAccount(account: AccountRecord) {
+    setDeletingId(account.id);
+    setDeleteError((prev) => ({ ...prev, [account.id]: "" }));
+    const { error } = await deleteAccount(account.id);
+    setDeletingId(null);
+    if (error) { setDeleteError((prev) => ({ ...prev, [account.id]: error })); return; }
+    setDeleteConfirmId(null);
+    setAccounts((prev) => prev.filter((a) => a.id !== account.id));
+    fetchAccounts();
   }
 
   const draftCount = accounts.filter((a) => a.status === "draft").length;
@@ -308,6 +326,17 @@ export default function AdminDashboard({ onLogout, onOpenAccount }: Props) {
                       Verify
                       {activePanel === "verify" ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
                     </button>
+                    <button
+                      onClick={() => setDeleteConfirmId(deleteConfirmId === account.id ? null : account.id)}
+                      className={`py-2 px-3 rounded-lg border text-xs font-medium transition-colors ${
+                        deleteConfirmId === account.id
+                          ? "border-red-300 bg-red-50 text-red-700"
+                          : "border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-200 hover:bg-red-50"
+                      }`}
+                      title="Delete account"
+                    >
+                      <Trash2 size={12} />
+                    </button>
                   </div>
 
                   {/* Users panel */}
@@ -411,6 +440,39 @@ export default function AdminDashboard({ onLogout, onOpenAccount }: Props) {
                           className="flex-1 py-2 rounded-lg border border-green-200 bg-green-50 text-green-700 text-xs font-semibold hover:bg-green-100 transition-colors disabled:opacity-50"
                         >
                           {isVerifying ? "Saving…" : "Mark Verified"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Delete confirm panel */}
+                  {deleteConfirmId === account.id && (
+                    <div className="border-t border-red-100 bg-red-50 px-5 py-4 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-semibold text-red-700">Delete Account</p>
+                        <button onClick={() => setDeleteConfirmId(null)} className="text-red-300 hover:text-red-600">
+                          <X size={13} />
+                        </button>
+                      </div>
+                      <p className="text-xs text-red-700">
+                        Permanently delete <span className="font-semibold">{account.org_name}</span>? This cannot be undone.
+                      </p>
+                      {deleteError[account.id] && (
+                        <p className="text-xs text-red-600">{deleteError[account.id]}</p>
+                      )}
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setDeleteConfirmId(null)}
+                          className="flex-1 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => handleDeleteAccount(account)}
+                          disabled={deletingId === account.id}
+                          className="flex-1 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors disabled:opacity-50"
+                        >
+                          {deletingId === account.id ? "Deleting…" : "Delete"}
                         </button>
                       </div>
                     </div>

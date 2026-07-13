@@ -62,7 +62,7 @@ export default function Step5RolesStaff({ config, updateConfig, onNext, onBack, 
       label: "Staff Assigned",
       value: (() => {
         const total = roles.reduce((sum, r) => sum + (r.staffEmails?.length ?? 0) + (r.staffMembers?.length ?? 0), 0);
-        return total > 0 ? `${total} staff member${total !== 1 ? "s" : ""} assigned` : "No staff assigned yet";
+        return total > 0 ? `${total} staff member${total !== 1 ? "s" : ""} assigned` : "You can assign staff in the Users section later";
       })(),
     },
   ];

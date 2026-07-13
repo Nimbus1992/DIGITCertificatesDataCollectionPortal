@@ -47,7 +47,7 @@ export default function Step2Branding({ config, updateConfig, onNext, onBack, on
       onBack={onBack}
       onSaveDraft={onSaveDraft}
       summaryItems={summaryItems}
-      nextSectionLabel="Configure Integrations"
+      nextSectionLabel="Configure Boundary"
     >
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
 

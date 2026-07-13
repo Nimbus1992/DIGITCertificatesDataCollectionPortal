@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import type { ImplementationConfig } from "./types";
-import { DEFAULT_CONFIG, STORAGE_KEY, STEP_KEY } from "./defaults";
+import { DEFAULT_CONFIG, STORAGE_KEY, STEP_KEY, OVERALL_Q_INDEX_KEY, CATEGORIES_CLEARED_KEY } from "./defaults";
 import { saveConfig, type AccountRecord } from "./lib/supabase";
 
 // Persists which steps have been completed (user clicked Next/Save past them)
@@ -57,8 +57,8 @@ const STEP_INTEGRATIONS = 4;
 // Ordered list of all steps matching sidebar top-to-bottom layout
 const ORDERED_STEPS: number[] = [
   STEP_ACCOUNT,
-  STEP_BOUNDARY,
   STEP_BRANDING,
+  STEP_BOUNDARY,
   STEP_INTEGRATIONS,
   ...APP_CONFIG_STEP_IDS,
   STEP_USERS,
@@ -160,7 +160,7 @@ export default function App() {
         if (!parsed.fees.renewalAdditionalFeeComponents) parsed.fees.renewalAdditionalFeeComponents = [];
         if (!parsed.workflow.stages)                parsed.workflow.stages               = DEFAULT_CONFIG.workflow.stages;
         if (!parsed.workflow.checklistItems)        parsed.workflow.checklistItems        = DEFAULT_CONFIG.workflow.checklistItems;
-        if (!parsed.workflow.renewalStages)         parsed.workflow.renewalStages         = [];
+        if (!parsed.workflow.renewalStages)         parsed.workflow.renewalStages         = [...(parsed.workflow.stages ?? [])];
         if (!parsed.workflow.renewalChecklistItems) parsed.workflow.renewalChecklistItems = [];
         if (parsed.notes === undefined)             parsed.notes = "";
         if (!parsed.overall.renewalApprovalMode) parsed.overall.renewalApprovalMode = "auto_if_unchanged";
@@ -178,6 +178,15 @@ export default function App() {
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(config)); }, [config]);
   useEffect(() => { localStorage.setItem(STEP_KEY, String(currentStep)); }, [currentStep]);
 
+  // ── Logo persistence — saved separately so Supabase stripping doesn't lose it ─
+  useEffect(() => {
+    const logo = config.branding.logoUrl;
+    const orgKey = config.account.organizationName;
+    if (logo?.startsWith("data:") && orgKey) {
+      localStorage.setItem(`blp_logo_${orgKey}`, logo);
+    }
+  }, [config.branding.logoUrl, config.account.organizationName]);
+
   const updateConfig = useCallback(<K extends keyof ImplementationConfig>(
     key: K, value: ImplementationConfig[K]
   ) => {
@@ -191,13 +200,20 @@ export default function App() {
   const saveDraft = useCallback(async () => {
     const draftConfig: ImplementationConfig = {
       ...config,
-      metadata: { ...config.metadata, status: "draft", lastStep: currentStep },
+      metadata: {
+        ...config.metadata,
+        status: "draft",
+        lastStep: currentStep,
+        completedSteps: [...completedSteps],
+      },
     };
-    const { error } = await saveConfig(draftConfig, currentStep);
+    // Pass the account's row ID so saveConfig does UPDATE WHERE id=? instead of
+    // upsert-by-org_name, which would create a new row if the user changed their org name.
+    const { error } = await saveConfig(draftConfig, currentStep, superUserAccount?.id);
     if (error) throw new Error(error);
     setConfig(draftConfig);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(draftConfig));
-  }, [config, currentStep]);
+  }, [config, currentStep, superUserAccount, completedSteps]);
 
   // ── Auth handlers ───────────────────────────────────────────────────────────
   function handleAdminLogin() {
@@ -243,7 +259,7 @@ export default function App() {
     if (!loaded.fees.renewalAdditionalFeeComponents) loaded.fees.renewalAdditionalFeeComponents = [];
     if (!loaded.workflow.stages)                loaded.workflow.stages               = DEFAULT_CONFIG.workflow.stages;
     if (!loaded.workflow.checklistItems)        loaded.workflow.checklistItems        = DEFAULT_CONFIG.workflow.checklistItems;
-    if (!loaded.workflow.renewalStages)         loaded.workflow.renewalStages         = [];
+    if (!loaded.workflow.renewalStages)         loaded.workflow.renewalStages         = [...(loaded.workflow.stages ?? [])];
     if (!loaded.workflow.renewalChecklistItems) loaded.workflow.renewalChecklistItems = [];
     if (loaded.notes === undefined)             loaded.notes                         = "";
     if (!loaded.overall.licenseValidityMode) loaded.overall.licenseValidityMode = "fixed";
@@ -257,16 +273,43 @@ export default function App() {
     return loaded;
   }
 
+  /** Restores the logo from a separate localStorage key if Supabase stripped it. */
+  function restoreLogo(loaded: ImplementationConfig): ImplementationConfig {
+    const orgKey = loaded.account.organizationName;
+    if (!orgKey) return loaded;
+    const needsRestore =
+      loaded.branding.logoUrl === "__has_logo__" ||
+      loaded.branding.logoUrl === "" ||
+      !loaded.branding.logoUrl;
+    if (!needsRestore) return loaded;
+    const saved = localStorage.getItem(`blp_logo_${orgKey}`);
+    if (saved?.startsWith("data:")) {
+      return { ...loaded, branding: { ...loaded.branding, logoUrl: saved } };
+    }
+    return loaded;
+  }
+
+  /** Reset per-step localStorage keys so every account always starts each section from question 1. */
+  function resetStepLocalState() {
+    localStorage.setItem(OVERALL_Q_INDEX_KEY, "0");
+    localStorage.setItem(CATEGORIES_CLEARED_KEY, "false");
+  }
+
   function handleSuperUserLogin(account: AccountRecord) {
     setIsAdmin(false);
     setOpenedFromAdmin(false);
     setSuperUserAccount(account);
-    const loaded = applyMigrations(account.config_data ?? DEFAULT_CONFIG);
+    const loaded = restoreLogo(applyMigrations(account.config_data ?? DEFAULT_CONFIG));
     setConfig(loaded);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
     const step = Math.max(1, Math.min(account.current_step ?? 1, TOTAL_STEPS));
     setCurrentStep(step);
     localStorage.setItem(STEP_KEY, String(step));
+    // Restore completedSteps from saved config metadata only — never auto-derive from step position
+    const restored = new Set<number>(loaded.metadata?.completedSteps ?? []);
+    setCompletedSteps(restored);
+    saveCompletedSteps(restored);
+    resetStepLocalState();
     setScreen("account-home");
   }
 
@@ -274,11 +317,16 @@ export default function App() {
     setIsAdmin(false);
     setOpenedFromAdmin(true);
     setSuperUserAccount(account);
-    const loaded = applyMigrations(account.config_data ?? DEFAULT_CONFIG);
+    const loaded = restoreLogo(applyMigrations(account.config_data ?? DEFAULT_CONFIG));
     setConfig(loaded);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(loaded));
     const step = Math.max(1, Math.min(account.current_step ?? 1, TOTAL_STEPS));
     setCurrentStep(step);
+    // Restore completedSteps from saved config metadata only — never auto-derive from step position
+    const restored = new Set<number>(loaded.metadata?.completedSteps ?? []);
+    setCompletedSteps(restored);
+    saveCompletedSteps(restored);
+    resetStepLocalState();
     setScreen("wizard");
   }
 
@@ -292,12 +340,20 @@ export default function App() {
   }
 
   function handleLogout() {
-    setScreen("login");
-    setIsAdmin(false);
-    setOpenedFromAdmin(false);
-    setSuperUserAccount(null);
-    setConfig(DEFAULT_CONFIG);
-    setCurrentStep(1);
+    // Save current state to Supabase before clearing — ensures data survives the logout/login cycle.
+    // Only save if a super-user account is active (admins have no config to save).
+    const saveBeforeLogout = superUserAccount ? saveDraft().catch(() => {}) : Promise.resolve();
+    saveBeforeLogout.finally(() => {
+      setScreen("login");
+      setIsAdmin(false);
+      setOpenedFromAdmin(false);
+      setSuperUserAccount(null);
+      setConfig(DEFAULT_CONFIG);
+      setCurrentStep(1);
+      setCompletedSteps(new Set());
+      saveCompletedSteps(new Set());
+      resetStepLocalState();
+    });
   }
 
   function handleBackToAdmin() {
@@ -321,6 +377,7 @@ export default function App() {
 
   /**
    * Advance to the next step in ORDERED_STEPS, marking current step done.
+   * Also auto-saves to Supabase so progress survives logout/login.
    */
   const goNext = useCallback(() => {
     markComplete(currentStep);
@@ -328,8 +385,9 @@ export default function App() {
     if (idx !== -1 && idx < ORDERED_STEPS.length - 1) {
       setCurrentStep(ORDERED_STEPS[idx + 1]);
     }
-    // If somehow currentStep is not in ORDERED_STEPS, do nothing special
-  }, [currentStep, markComplete]);
+    // Auto-save to Supabase — fire and forget; localStorage is the local fallback
+    saveDraft().catch(() => {});
+  }, [currentStep, markComplete, saveDraft]);
 
   const goPrev = useCallback(() => {
     const idx = ORDERED_STEPS.indexOf(currentStep);
@@ -367,6 +425,7 @@ export default function App() {
       <AccountHome
         orgName={superUserAccount?.org_name ?? config.account.organizationName ?? "Your Account"}
         config={config}
+        completedSteps={completedSteps}
         onEnter={handleEnterWizard}
         onLogout={handleLogout}
       />
@@ -398,6 +457,9 @@ export default function App() {
       setSidebarLockedMsg(getLockReason(stepId));
       setTimeout(() => setSidebarLockedMsg(null), 3500);
     } else {
+      // Auto-save current step before navigating so no data is lost when the
+      // user skips the "Save & Continue" flow by clicking the sidebar directly.
+      if (superUserAccount) saveDraft().catch(() => {});
       goToStep(stepId);
     }
   }
@@ -537,13 +599,13 @@ export default function App() {
             {/* 1. Account Settings — free nav */}
             <SidebarItem stepId={STEP_ACCOUNT} label="Account Settings" />
 
-            {/* 2. Boundary — free nav */}
-            <SidebarItem stepId={STEP_BOUNDARY} label="Boundary" />
-
-            {/* 3. Branding — free nav */}
+            {/* 2. Branding — free nav */}
             <SidebarItem stepId={STEP_BRANDING} label="Branding" />
 
-            {/* 4. Integrations — free nav, after Branding (Issue #8) */}
+            {/* 3. Boundary — free nav */}
+            <SidebarItem stepId={STEP_BOUNDARY} label="Boundary" />
+
+            {/* 4. Integrations — free nav */}
             <SidebarItem stepId={STEP_INTEGRATIONS} label="Integrations" />
 
             {/* 5. Application Configuration — sequential sub-steps, always expanded */}
@@ -637,7 +699,7 @@ export default function App() {
           {currentStep === STEP_USERS      && <StepUsers {...stepProps} />}
           {currentStep === STEP_OTHER_INFO && <StepOthers {...stepProps} />}
           {currentStep === STEP_REVIEW     && (
-            <Step8ReviewExport config={config} onBack={goPrev} onGoToStep={goToStep} updateConfig={updateConfig} />
+            <Step8ReviewExport config={config} onBack={goPrev} onGoToStep={goToStep} updateConfig={updateConfig} accountId={superUserAccount?.id} />
           )}
         </main>
       </div>

@@ -358,15 +358,64 @@ function SectionCard({
   const [editDraft, setEditDraft] = useState<EditedFieldOverride>({});
 
   const renderBoundaryRows = (subName: string) => {
-    const { availabilityScope, areas } = deployment;
-    const hasAreas = areas.some((a) => a.city.trim());
-    const isSelectScope = availabilityScope !== "entire_state";
+    const {
+      availabilityScope, areas,
+      hierarchyLevels, boundaryRows, uploadMethod, shapefileName, operatingLevel,
+    } = deployment;
+
     const badgeCls = "inline-block px-2 py-0.5 rounded-md text-xs font-medium";
     const fromBadge = <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-600 font-normal ml-1">Boundary</span>;
     const lockCell = <td className="px-4 py-2.5 text-center"><Lock size={13} className="text-slate-200 mx-auto" /></td>;
     const rowCls = "bg-indigo-50/20";
 
-    if (isSelectScope && !hasAreas) {
+    // ── New-style boundary (Excel rows or Shapefile) ───────────────────────
+    const levels = hierarchyLevels ?? [];
+    const rows = boundaryRows ?? [];
+    const opIdx = operatingLevel ?? 0;
+    const hasExcel = uploadMethod === "excel" && rows.length > 0 && levels.length > 0;
+    const hasShapefile = uploadMethod === "shapefile" && !!shapefileName && levels.length > 0;
+
+    if (hasExcel || hasShapefile) {
+      // Show one row per hierarchy level up to and including operating level
+      return (
+        <>
+          {levels.slice(0, opIdx + 1).map((lvl, li) => {
+            const isOp = li === opIdx;
+            const lvlVals = hasExcel
+              ? [...new Set(rows.map((r) => r[lvl.id]).filter(Boolean))]
+              : [];
+            const note = hasShapefile
+              ? `From shapefile`
+              : lvlVals.length > 0
+                ? lvlVals.slice(0, 4).join(", ") + (lvlVals.length > 4 ? ` +${lvlVals.length - 4} more` : "")
+                : "Configured in Boundary step";
+            return (
+              <tr key={`${subName}-boundary-${lvl.id}`} className={rowCls}>
+                <td className="px-4 py-2.5 text-sm text-slate-800 font-medium">
+                  <span className="flex items-center">{lvl.name || `Level ${li + 1}`}{fromBadge}</span>
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className={`${badgeCls} bg-slate-100 text-slate-600`}>{isOp ? "Dropdown" : "Dropdown"}</span>
+                </td>
+                <td className="px-4 py-2.5">
+                  <span className={`${badgeCls} ${isOp ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-500"}`}>
+                    {isOp ? "Required" : "Optional"}
+                  </span>
+                </td>
+                <td className="px-4 py-2.5 text-xs text-slate-500">{note}</td>
+                {lockCell}
+              </tr>
+            );
+          })}
+        </>
+      );
+    }
+
+    // ── Old-style boundary (availabilityScope / areas) ─────────────────────
+    const hasAreas = (areas ?? []).some((a) => a.city.trim());
+    const isSelectScope = availabilityScope && availabilityScope !== "entire_state";
+
+    if (!availabilityScope || (isSelectScope && !hasAreas)) {
       return (
         <tr key={`${subName}-boundary-warn`}>
           <td colSpan={5} className="px-4 py-2">
@@ -378,9 +427,6 @@ function SectionCard({
         </tr>
       );
     }
-
-    const areaLabel = availabilityScope === "select_districts" ? "District" : "City";
-    const hasZones = areas.some((a) => a.zones.some((z) => z.trim()));
 
     if (availabilityScope === "entire_state") {
       return (
@@ -394,7 +440,9 @@ function SectionCard({
       );
     }
 
-    const cityValues = areas.map((a) => a.city).filter(Boolean).join(", ");
+    const areaLabel = availabilityScope === "select_districts" ? "District" : "City";
+    const hasZones = (areas ?? []).some((a) => a.zones.some((z) => z.trim()));
+    const cityValues = (areas ?? []).map((a) => a.city).filter(Boolean).join(", ");
     return (
       <>
         <tr key={`${subName}-area`} className={rowCls}>
@@ -481,7 +529,6 @@ function SectionCard({
                   .filter((field) => !deletedRecommendedFields.includes(field.name))
                   .map((field, fi) => {
                     const isIdType = field.name === "ID Type";
-                    const isSystemMandatory = field.mandatory && !field.removable;
                     const override = editedRecommendedFields[field.name] ?? {};
                     const displayName = override.name ?? field.name;
                     const displayType = (override.fieldType ?? field.fieldType) as FieldType;
@@ -489,8 +536,7 @@ function SectionCard({
                     const displayValidation = override.validation ?? field.validation;
                     const isEditingThis = editingField === field.name;
 
-                    const lockedCls = "w-full px-2.5 py-1.5 rounded-lg border border-slate-200 text-sm bg-slate-100 text-slate-400 cursor-not-allowed";
-                    const editCls   = "w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 bg-white";
+                    const editCls = "w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 bg-white";
 
                     if (isEditingThis) {
                       return (
@@ -502,20 +548,18 @@ function SectionCard({
                                 <label className="block text-xs text-slate-500 mb-1">Field Name</label>
                                 <input
                                   type="text"
-                                  disabled={isSystemMandatory}
                                   value={editDraft.name ?? displayName}
                                   onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
-                                  className={isSystemMandatory ? lockedCls : editCls}
+                                  className={editCls}
                                 />
                               </div>
                               {/* Type */}
                               <div>
                                 <label className="block text-xs text-slate-500 mb-1">Type</label>
                                 <select
-                                  disabled={isSystemMandatory}
                                   value={editDraft.fieldType ?? displayType}
                                   onChange={(e) => setEditDraft({ ...editDraft, fieldType: e.target.value })}
-                                  className={isSystemMandatory ? lockedCls : editCls}
+                                  className={editCls}
                                 >
                                   {FIELD_TYPES.map((ft) => <option key={ft} value={ft}>{labelFieldType(ft)}</option>)}
                                 </select>
@@ -524,10 +568,9 @@ function SectionCard({
                               <div>
                                 <label className="block text-xs text-slate-500 mb-1">Required</label>
                                 <select
-                                  disabled={isSystemMandatory}
                                   value={String(editDraft.mandatory ?? displayMandatory)}
                                   onChange={(e) => setEditDraft({ ...editDraft, mandatory: e.target.value === "true" })}
-                                  className={isSystemMandatory ? lockedCls : editCls}
+                                  className={editCls}
                                 >
                                   <option value="true">Required</option>
                                   <option value="false">Optional</option>
@@ -538,15 +581,13 @@ function SectionCard({
                                 <label className="block text-xs text-slate-500 mb-1">Validation / Notes</label>
                                 <input
                                   type="text"
-                                  value={editDraft.validation ?? displayValidation}
+                                  value={editDraft.validation ?? (displayValidation === "—" ? "" : displayValidation)}
                                   onChange={(e) => setEditDraft({ ...editDraft, validation: e.target.value })}
+                                  placeholder="e.g. Min 3 characters"
                                   className={editCls}
                                 />
                               </div>
                             </div>
-                            {isSystemMandatory && (
-                              <p className="text-xs text-slate-400 mb-2 italic">Field name, type, and required status are locked for system fields — only Validation / Notes can be changed.</p>
-                            )}
                             <div className="flex items-center gap-2">
                               <button
                                 onClick={() => { onEditRecommendedField(field.name, { ...override, ...editDraft }); setEditingField(null); setEditDraft({}); }}
@@ -570,7 +611,7 @@ function SectionCard({
                             {!isIdType && !CATEGORY_FIELDS.has(field.name) && (
                               <button
                                 onClick={() => { setEditingField(field.name); setEditDraft({}); }}
-                                className="text-slate-300 hover:text-blue-500 transition-colors p-1 rounded"
+                                className="text-slate-400 hover:text-blue-500 transition-colors p-1 rounded"
                                 title="Edit field"
                               >
                                 <Pencil size={13} />
@@ -635,7 +676,7 @@ function SectionCard({
                                 if (!e.target.value.trim()) onEditRecommendedField(field.name, { ...override, validation: "—" });
                               }}
                               placeholder="Add notes…"
-                              className="w-full px-2 py-1 rounded border border-transparent hover:border-slate-200 focus:border-slate-300 focus:ring-1 focus:ring-blue-400 text-xs text-slate-600 bg-transparent focus:bg-white transition-colors"
+                              className="w-full px-2 py-1 rounded border border-slate-200 hover:border-slate-300 focus:border-blue-400 focus:ring-1 focus:ring-blue-400 text-xs text-slate-600 bg-transparent focus:bg-white transition-colors"
                             />
                           )}
                         </td>
@@ -928,7 +969,7 @@ function DocCard({ documents, onChange }: DocCardProps) {
                   {/* Actions */}
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-0.5">
-                      <button onClick={() => startEdit(doc)} className="text-slate-300 hover:text-blue-500 transition-colors p-1 rounded" title="Edit">
+                      <button onClick={() => startEdit(doc)} className="text-slate-400 hover:text-blue-500 transition-colors p-1 rounded" title="Edit">
                         <Pencil size={13} />
                       </button>
                       {doc.isRecommended ? (

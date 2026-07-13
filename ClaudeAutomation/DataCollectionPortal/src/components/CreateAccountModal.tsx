@@ -11,7 +11,7 @@ interface Props {
 export default function CreateAccountModal({ onClose, onCreated }: Props) {
   const [orgName, setOrgName] = useState("");
   const [department, setDepartment] = useState("");
-  const [country, setCountry] = useState("India");
+  const [country, setCountry] = useState("Kenya");
   const [emails, setEmails] = useState<string[]>([""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");

@@ -14,8 +14,10 @@ export function isStepComplete(stepId: number, config: ImplementationConfig): bo
     case 2:
       return !!config.branding.portalName.trim();
     case 3: {
-      const areas = config.deployment.areas;
-      return !!(config.deployment.availabilityScope && areas.some((a) => a.city.trim()));
+      const d = config.deployment;
+      if (!d.availabilityScope) return false;
+      if (d.availabilityScope === "entire_state") return true;
+      return d.areas.some((a) => a.city.trim());
     }
     case 4:
       return true; // Integrations — all optional

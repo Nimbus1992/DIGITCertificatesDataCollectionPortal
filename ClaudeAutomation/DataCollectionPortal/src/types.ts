@@ -43,6 +43,8 @@ export interface DeploymentConfig {
   uploadMethod: "shapefile" | "excel" | "";
   shapefileName: string;
   operatingLevel: number; // index into hierarchyLevels — level used in the application form
+  boundaryProcessed?: boolean; // true once "Process Boundary Data" has been confirmed
+  shapefileDataUrl?: string;   // base64 data URL of the uploaded shapefile for download
 }
 
 export interface TradeCategory {
@@ -161,6 +163,9 @@ export interface FeesConfig {
   renewalCustomFeeSlabs: Record<string, CustomFeeSlabEntry[]>;
   renewalCustomFeeTable: Array<Record<string, number | string>>;
   renewalAdditionalFeeComponents: AdditionalFeeComponent[];
+
+  // ── Proration (applies when licenseValidityMode = "financial_year") ──────────
+  prorateFees?: boolean;
 }
 
 export interface AdditionalFeeComponent {
@@ -245,6 +250,7 @@ export interface WorkflowAction {
 }
 
 export interface WorkflowNotification {
+  event?: string;      // label for the trigger event (e.g. action label)
   channel: "email" | "sms" | "push";
   recipient: "applicant" | "staff" | "both";
   subject: string;
@@ -270,6 +276,22 @@ export interface WorkflowChecklistItem {
   required: boolean;
 }
 
+// NEW: question inside a checklist
+export interface WorkflowChecklistQuestion {
+  id: string;
+  label: string;
+  fieldType: "checkbox" | "radio" | "text" | "file";
+  required: boolean;
+}
+
+// NEW: a named checklist attached to a stage (replaces flat checklistItems)
+export interface WorkflowChecklist {
+  id: string;
+  stageId: string;
+  name: string;
+  questions: WorkflowChecklistQuestion[];
+}
+
 export interface WorkflowConfig {
   approvalLevels: number;
   processingSlaDays: number;
@@ -278,9 +300,11 @@ export interface WorkflowConfig {
   renewalReminderDays: number;
   allowCitizenWithdrawal: boolean;
   stages: WorkflowStage[];
-  checklistItems: WorkflowChecklistItem[];
+  checklistItems: WorkflowChecklistItem[];      // kept for backward compat
+  checklists: WorkflowChecklist[];              // NEW
   renewalStages?: WorkflowStage[];
-  renewalChecklistItems?: WorkflowChecklistItem[];
+  renewalChecklistItems?: WorkflowChecklistItem[];  // kept for backward compat
+  renewalChecklists?: WorkflowChecklist[];      // NEW
 }
 
 // ── Top-level ─────────────────────────────────────────────────────────────────
@@ -302,5 +326,6 @@ export interface ImplementationConfig {
     updatedAt: string;
     status: "draft" | "submitted";
     lastStep: number;
+    completedSteps?: number[];
   };
 }
